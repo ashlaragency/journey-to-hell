@@ -55,6 +55,7 @@ function skillMod(c: CharacterRow, skillName: string): number {
 
 export default function Play({ world, characters, schemaOk, playerName, onCharactersChange }: PlayProps) {
   const [adventures, setAdventures] = useState<Adv[]>(ADVENTURES_SEED.map((a, i) => ({ ...a, id: `seed-${i}` })));
+  const [adventureError, setAdventureError] = useState<string | null>(null);
   const [advId, setAdvId] = useState<string>(() => localStorage.getItem('jth_adv') ?? '');
   const [sceneIdx, setSceneIdx] = useState<number>(() => parseInt(localStorage.getItem('jth_scene') ?? '0', 10) || 0);
   const [charId, setCharId] = useState<string>(() => localStorage.getItem('jth_char') ?? '');
@@ -75,64 +76,56 @@ export default function Play({ world, characters, schemaOk, playerName, onCharac
     () => adventures.find((a) => a.id === advId) ?? adventures[0] ?? null,
     [adventures, advId],
   );
+  const worldId = world?.id;
   const scene = adventure?.scenes[Math.min(sceneIdx, adventure.scenes.length - 1)];
 
-  // Cargar aventuras, escenas y enemigos desde Supabase si las tablas existen.
   useEffect(() => {
-    if (!schemaOk || !world) return;
-    (async () => {
-      const { data: advs } = await supabase
+    if (!schemaOk || !worldId) return;
+    const controller = new AbortController();
+    void (async () => {
+      const { data, error } = await supabase
         .from('adventures')
-        .select('*')
-        .eq('world_id', world.id)
-        .order('duration', { ascending: true });
-      if (!advs || advs.length === 0) return;
-      const loaded: Adv[] = [];
-      for (const a of advs) {
-        const { data: sc } = await supabase
-          .from('scenes')
-          .select('*')
-          .eq('adventure_id', a.id)
-          .order('position', { ascending: true });
-        const { data: en } = await supabase
-          .from('enemies')
-          .select('*')
-          .eq('adventure_id', a.id);
-        loaded.push({
-          id: a.id,
-          name: a.name,
-          durationLabel: a.duration_label,
-          description: a.description ?? '',
-          scenes: (sc ?? []).map((s) => ({ place: s.place, narration: s.narration })),
-          enemies: (en ?? []).map((e) => ({
-            name: e.name,
-            hp: e.hp,
-            ac: e.ac,
-            attack_bonus: e.attack_bonus,
-            damage_dice: e.damage_dice,
-          })),
-        });
+        .select('id,name,duration_label,description,scenes(place,narration),enemies(name,hp,ac,attack_bonus,damage_dice)')
+        .eq('world_id', worldId)
+        .order('duration', { ascending: true })
+        .order('position', { referencedTable: 'scenes', ascending: true })
+        .abortSignal(controller.signal);
+      if (controller.signal.aborted) return;
+      if (error || !data?.length) {
+        setAdventureError(worldId);
+        return;
       }
-      if (loaded.length > 0) setAdventures(loaded);
+      setAdventureError(null);
+      setAdventures(data.map((row) => ({
+        id: row.id,
+        name: row.name,
+        durationLabel: row.duration_label,
+        description: row.description ?? '',
+        scenes: row.scenes,
+        enemies: row.enemies,
+      })));
     })();
-  }, [schemaOk, world]);
+    return () => controller.abort();
+  }, [schemaOk, worldId]);
 
   // Cargar combate activo y suscribirse en vivo.
   useEffect(() => {
-    if (!schemaOk || !world) return;
+    if (!schemaOk || !worldId) return;
+    const controller = new AbortController();
     (async () => {
       const { data } = await supabase
         .from('combat')
         .select('*')
-        .eq('world_id', world.id)
+        .eq('world_id', worldId)
         .eq('active', true)
         .order('created_at', { ascending: false })
         .limit(1)
+        .abortSignal(controller.signal)
         .maybeSingle();
-      if (data) setCombat(data as CombatRow);
+      if (!controller.signal.aborted && data) setCombat(data as CombatRow);
     })();
     const ch = supabase
-      .channel('jth-combat')
+      .channel(`jth-combat-${crypto.randomUUID()}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'combat' }, (payload) => {
         const row = (payload.new ?? payload.old) as CombatRow;
         if (payload.eventType === 'UPDATE' || payload.eventType === 'INSERT') setCombat(row);
@@ -140,13 +133,10 @@ export default function Play({ world, characters, schemaOk, playerName, onCharac
       })
       .subscribe();
     return () => {
-      supabase.removeChannel(ch);
+      controller.abort();
+      void supabase.removeChannel(ch);
     };
-  }, [schemaOk, world]);
-
-  useEffect(() => {
-    if (adventure) localStorage.setItem('jth_adv', adventure.id);
-  }, [adventure]);
+  }, [schemaOk, worldId]);
   useEffect(() => {
     localStorage.setItem('jth_scene', String(sceneIdx));
   }, [sceneIdx]);
@@ -430,13 +420,22 @@ export default function Play({ world, characters, schemaOk, playerName, onCharac
         </div>
       )}
 
+      {adventureError && adventureError === worldId && (
+        <p className="banner-warning" role="status">No se pudieron cargar las aventuras del mundo. Puedes explorar las aventuras incluidas en el juego.</p>
+      )}
+
       {/* Selector de aventura y personaje */}
       <div className="card">
         <h3>🗺️ ¿Dónde juegas?</h3>
         <div className="row">
           <label>
             Aventura
-            <select value={adventure?.id ?? ''} onChange={(e) => { setAdvId(e.target.value); setSceneIdx(0); setResult(null); }}>
+            <select value={adventure?.id ?? ''} onChange={(e) => {
+              setAdvId(e.target.value);
+              localStorage.setItem('jth_adv', e.target.value);
+              setSceneIdx(0);
+              setResult(null);
+            }}>
               {adventures.map((a) => (
                 <option key={a.id} value={a.id}>
                   {a.name} — {a.durationLabel}

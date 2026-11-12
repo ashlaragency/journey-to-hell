@@ -1,5 +1,5 @@
 // Journey to Hell — app multijugador (Supabase Realtime, clave anon).
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import {
   supabase,
   checkSchema,
@@ -9,13 +9,14 @@ import {
   type CharacterRow,
 } from './lib/supabase';
 import Play from './components/Play';
-import CharacterCreator from './components/CharacterCreator';
 import DiceTray from './components/DiceTray';
-import BattleMap from './components/BattleMap';
-import Atlas from './components/Atlas';
 import type { MapaAtlas } from './lib/atlas';
-import Compendium from './components/Compendium';
-import WorldPanel from './components/WorldPanel';
+
+const CharacterCreator = lazy(() => import('./components/CharacterCreator'));
+const BattleMap = lazy(() => import('./components/BattleMap'));
+const Atlas = lazy(() => import('./components/Atlas'));
+const Compendium = lazy(() => import('./components/Compendium'));
+const WorldPanel = lazy(() => import('./components/WorldPanel'));
 
 type Tab = 'jugar' | 'personajes' | 'mundo' | 'mapa' | 'atlas' | 'compendio';
 
@@ -142,7 +143,7 @@ export default function App() {
               playerName={playerName}
               onCharactersChange={fetchAll}
             />
-            <DiceTray worldId={world?.id ?? null} playerName={playerName} characterName={null} />
+            <DiceTray key={world?.id} worldId={world?.id ?? null} playerName={playerName} characterName={null} />
           </>
         )}
 
@@ -159,16 +160,18 @@ export default function App() {
               </button>
             </div>
             {showCreator && (
-              <CharacterCreator
-                worldId={world?.id ?? null}
-                playerName={playerName}
-                schemaOk={schemaOk}
-                onCreated={() => {
-                  setShowCreator(false);
-                  fetchAll();
-                }}
-                onCancel={() => setShowCreator(false)}
-              />
+              <Suspense fallback={<p role="status">Cargando creador…</p>}>
+                <CharacterCreator
+                  worldId={world?.id ?? null}
+                  playerName={playerName}
+                  schemaOk={schemaOk}
+                  onCreated={() => {
+                    setShowCreator(false);
+                    fetchAll();
+                  }}
+                  onCancel={() => setShowCreator(false)}
+                />
+              </Suspense>
             )}
             <div className="grid-cards">
               {characters.map((c) => (
@@ -226,27 +229,29 @@ export default function App() {
           </div>
         )}
 
-        {tab === 'mundo' && <WorldPanel world={world} schemaOk={schemaOk} playerName={playerName} />}
+        <Suspense fallback={<p role="status">Cargando sección…</p>}>
+          {tab === 'mundo' && <WorldPanel world={world} schemaOk={schemaOk} playerName={playerName} />}
 
-        {tab === 'mapa' && (
-          <BattleMap
-            worldId={world?.id ?? null}
-            characters={characters}
-            schemaOk={schemaOk}
-            mapaInicial={mapaAtlas}
-          />
-        )}
+          {tab === 'mapa' && (
+            <BattleMap
+              worldId={world?.id ?? null}
+              characters={characters}
+              schemaOk={schemaOk}
+              mapaInicial={mapaAtlas}
+            />
+          )}
 
-        {tab === 'atlas' && (
-          <Atlas
-            onAbrirMapa={(m) => {
-              setMapaAtlas(m);
-              setTab('mapa');
-            }}
-          />
-        )}
+          {tab === 'atlas' && (
+            <Atlas
+              onAbrirMapa={(m) => {
+                setMapaAtlas(m);
+                setTab('mapa');
+              }}
+            />
+          )}
 
-        {tab === 'compendio' && <Compendium />}
+          {tab === 'compendio' && <Compendium />}
+        </Suspense>
       </main>
 
       <footer>

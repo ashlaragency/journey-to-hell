@@ -49,28 +49,38 @@ export default function DiceTray({ worldId, playerName, characterName }: DiceTra
 
   // Últimas 10 tiradas del mundo + suscripción en vivo a las nuevas.
   useEffect(() => {
-    if (!worldId) {
-      setRolls([]);
-      return;
-    }
-    let cancelled = false;
-    supabase
-      .from('dice_rolls')
-      .select('*')
-      .eq('world_id', worldId)
-      .order('created_at', { ascending: false })
-      .limit(10)
-      .then(({ data, error }) => {
-        if (cancelled) return;
-        if (error) {
-          console.warn('No se pudieron cargar las tiradas:', error.message);
-          return;
-        }
-        setRolls((data ?? []) as RollItem[]);
+    if (!worldId) return;
+    const controller = new AbortController();
+
+    function mergeRolls(incoming: RollItem[]) {
+      if (controller.signal.aborted) return;
+      setRolls((previous) => {
+        const unique = new Map(previous.map((roll) => [roll.id, roll]));
+        for (const roll of incoming) unique.set(roll.id, roll);
+        return [...unique.values()]
+          .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))
+          .slice(0, 10);
       });
+    }
+
+    async function loadRolls() {
+      const { data, error } = await supabase
+        .from('dice_rolls')
+        .select('*')
+        .eq('world_id', worldId)
+        .order('created_at', { ascending: false })
+        .limit(10)
+        .abortSignal(controller.signal);
+      if (controller.signal.aborted) return;
+      if (error) {
+        console.warn('No se pudieron cargar las tiradas:', error.message);
+        return;
+      }
+      mergeRolls(data as RollItem[]);
+    }
 
     const channel = supabase
-      .channel(`dice-rolls-${worldId}`)
+      .channel(`dice-rolls-${worldId}-${crypto.randomUUID()}`)
       .on(
         'postgres_changes',
         {
@@ -80,15 +90,18 @@ export default function DiceTray({ worldId, playerName, characterName }: DiceTra
           filter: `world_id=eq.${worldId}`,
         },
         (payload) => {
-          const row = payload.new as RollItem;
-          setRolls((prev) => [row, ...prev].slice(0, 10));
+          mergeRolls([payload.new as RollItem]);
         },
       )
-      .subscribe();
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          void loadRolls();
+        }
+      });
 
     return () => {
-      cancelled = true;
-      supabase.removeChannel(channel);
+      controller.abort();
+      void supabase.removeChannel(channel);
     };
   }, [worldId]);
 
