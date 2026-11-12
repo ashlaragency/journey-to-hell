@@ -12,6 +12,7 @@ import {
   type Combatant,
 } from '../lib/supabase';
 import { ADVENTURES_SEED } from '../lib/compendium';
+import MonsterPortrait from './MonsterPortrait';
 import {
   SKILLS,
   WEAPONS,
@@ -413,10 +414,10 @@ export default function Play({ world, characters, schemaOk, playerName, onCharac
   const dying = characters.filter((c) => c.status === 'vivo' && c.hp <= 0);
 
   return (
-    <div>
+    <div className="play-panel">
       {!schemaOk && (
-        <div className="banner-warning">
-          ⚠️ Las tablas del juego aún no están listas en Supabase. Aplica el archivo <b>schema.sql</b> en el editor SQL del panel de Supabase (proyecto dnd-mundo-vivo) para que el juego se guarde y se sincronice. Mientras tanto puedes explorar las aventuras.
+        <div className="banner-warning" role="status">
+          No pudimos conectar con el mundo. Puedes explorar las aventuras y volver a cargar la página para intentarlo de nuevo.
         </div>
       )}
 
@@ -425,8 +426,7 @@ export default function Play({ world, characters, schemaOk, playerName, onCharac
       )}
 
       {/* Selector de aventura y personaje */}
-      <div className="card">
-        <h3>🗺️ ¿Dónde juegas?</h3>
+      <div className="card adventure-picker">
         <div className="row">
           <label>
             Aventura
@@ -462,24 +462,37 @@ export default function Play({ world, characters, schemaOk, playerName, onCharac
 
       {/* Escena actual */}
       {adventure && scene && (
-        <div className="card scene-card">
-          <div className="world-tag">🌍 {world?.name ?? 'Journey to Hell'} · {adventure.name}</div>
-          <h2>📍 Estás aquí: {scene.place}</h2>
-          <p className="narration">{scene.narration}</p>
-          <p className="scene-progress">
-            Escena {Math.min(sceneIdx + 1, adventure.scenes.length)} de {adventure.scenes.length}
-          </p>
-          {activeChar && (
-            <p className="char-status">
-              <b>{activeChar.name}</b> · {activeChar.species} {activeChar.class_name} · Vida {activeChar.hp}/{activeChar.max_hp} · Defensa {activeChar.ac}
-            </p>
-          )}
-        </div>
+        <section className="card scene-card" aria-labelledby="scene-title">
+          <div className="scene-content">
+            <p className="world-tag">{adventure.name}</p>
+            <h2 id="scene-title">{scene.place}</h2>
+            <p className="narration">{scene.narration}</p>
+          </div>
+          <div className="scene-footer">
+            <div className="scene-progress">
+              <span>Escena {Math.min(sceneIdx + 1, adventure.scenes.length)} de {adventure.scenes.length}</span>
+              <progress value={Math.min(sceneIdx + 1, adventure.scenes.length)} max={adventure.scenes.length} aria-label="Progreso de la aventura" />
+            </div>
+            {activeChar && (
+              <div className="char-status">
+                <span className="character-avatar" aria-hidden="true">{activeChar.name.charAt(0)}</span>
+                <div>
+                  <b>{activeChar.name}</b>
+                  <span>{activeChar.species} {activeChar.class_name}</span>
+                </div>
+                <div className="char-vitals">
+                  <b>{activeChar.hp}/{activeChar.max_hp} <small>vida</small></b>
+                  <span>Defensa {activeChar.ac}</span>
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
       )}
 
       {/* Resultado de la última acción */}
       {result && (
-        <div className="card result-card">
+        <div className="card result-card" role="status">
           <p>{result}</p>
           {!combat?.active && (
             <button className="btn btn-primary" onClick={() => { setResult(null); }}>
@@ -491,50 +504,77 @@ export default function Play({ world, characters, schemaOk, playerName, onCharac
 
       {/* ¿Qué haces? */}
       {!combat?.active && activeChar && (
-        <div className="card">
-          <h2>❓ ¿Qué haces?</h2>
+        <section className="card action-panel" aria-labelledby="action-title">
+          <h2 id="action-title">¿Qué haces?</h2>
           <p className="hint">Toca una opción. El juego tira el dado por ti y te explica qué pasa.</p>
           <div className="grid-actions">
             <button className="btn btn-action" onClick={() => rollSkill('Percepción', 'Mirar')}>
-              👀 Mirar a mi alrededor
+              Mirar a mi alrededor
             </button>
             <button className="btn btn-action" onClick={() => rollSkill('Persuasión', 'Hablar')}>
-              💬 Hablar con alguien
+              Hablar con alguien
             </button>
             <button className="btn btn-action" onClick={() => rollSkill('Sigilo', 'Moverse sin ruido')}>
-              🤫 Moverme sin ruido
+              Moverme sin ruido
             </button>
             <button className="btn btn-action" onClick={() => rollSkill('Investigación', 'Buscar pistas')}>
-              🔍 Buscar pistas
+              Buscar pistas
             </button>
             <button
               className="btn btn-action"
+              disabled={!adventure || sceneIdx >= adventure.scenes.length - 1}
               onClick={() => {
                 setSceneIdx((i) => Math.min(i + 1, (adventure?.scenes.length ?? 1) - 1));
                 setResult('Avanzas al siguiente lugar. ¿Qué ves ahora?');
               }}
             >
-              🚶 Seguir adelante
+              Seguir adelante
             </button>
             <button className="btn btn-danger" onClick={startCombat}>
-              ⚔️ ¡A pelear!
+              Entrar en combate
             </button>
           </div>
-          <p className="hint">Para mirar, hablar o moverte sin ruido necesitas sacar 12 o más con el dado de 20 caras más tu bono.</p>
-        </div>
+          <p className="hint">Necesitas 12 o más en el dado de 20 caras más tu bono para superar estas pruebas.</p>
+        </section>
+      )}
+
+      {!combat?.active && adventure && adventure.enemies.length > 0 && (
+        <section className="encounter-panel" aria-labelledby="encounter-title">
+          <div className="section-heading">
+            <h2 id="encounter-title">Enemigos de esta aventura</h2>
+          </div>
+          <div className="encounter-list">
+            {adventure.enemies.map((enemy) => (
+              <article key={enemy.name} className="encounter-card">
+                <MonsterPortrait name={enemy.name} className="encounter-portrait" />
+                <div>
+                  <h3>{enemy.name}</h3>
+                  <p>{enemy.hp} vida <span aria-hidden="true">·</span> Defensa {enemy.ac}</p>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
       )}
 
       {/* Combate */}
       {combat?.active && (
         <div className="card combat-card">
-          <h2>⚔️ ¡Pelea en {adventure?.name}!</h2>
+          <h2>Combate en {adventure?.name}</h2>
           <p className="hint">Ronda {combat.round} · Turno de: <b>{turn?.name ?? '—'}</b></p>
           <div className="combatants">
             {combat.combatants.map((c, i) => (
               <div key={c.ref_id} className={`combatant ${i === combat.turn_index % combat.combatants.length ? 'active-turn' : ''} ${c.hp <= 0 ? 'down' : ''}`}>
-                <b>{c.kind === 'pc' ? '🧑' : '👹'} {c.name}</b>
-                <span>Vida {Math.max(0, c.hp)}/{c.max_hp} · Defensa {c.ac}</span>
-                <div className="hp-bar"><div style={{ width: `${(Math.max(0, c.hp) / c.max_hp) * 100}%` }} /></div>
+                {c.kind === 'enemy' ? (
+                  <MonsterPortrait name={c.name} className="combat-portrait" />
+                ) : (
+                  <span className="character-avatar" aria-hidden="true">{c.name.charAt(0)}</span>
+                )}
+                <div className="combatant-info">
+                  <b>{c.name}</b>
+                  <span>Vida {Math.max(0, c.hp)}/{c.max_hp} · Defensa {c.ac}</span>
+                  <div className="hp-bar"><div style={{ width: `${(Math.max(0, c.hp) / Math.max(1, c.max_hp)) * 100}%` }} /></div>
+                </div>
               </div>
             ))}
           </div>
@@ -545,11 +585,11 @@ export default function Play({ world, characters, schemaOk, playerName, onCharac
               <div className="grid-actions">
                 {combat.combatants.filter((c) => c.kind === 'enemy' && c.hp > 0).map((e) => (
                   <button key={e.ref_id} className="btn btn-action" onClick={() => pcAttack(e)}>
-                    ⚔️ Atacar a {e.name}
+                    Atacar a {e.name}
                   </button>
                 ))}
                 <button className="btn" onClick={() => setResult(`${turn.name} se defiende: hasta su próximo turno, los ataques contra él tienen desventaja.`)}>
-                  🛡️ Defenderme
+                  Defenderme
                 </button>
                 <button className="btn btn-primary" onClick={nextTurn}>Siguiente turno →</button>
               </div>
@@ -558,7 +598,7 @@ export default function Play({ world, characters, schemaOk, playerName, onCharac
           {turn?.kind === 'enemy' && (
             <div>
               <h3>Turno del enemigo: {turn.name}</h3>
-              <button className="btn btn-danger" onClick={enemyAttack}>👹 Que ataque</button>
+              <button className="btn btn-danger" onClick={enemyAttack}>Que ataque</button>
               <button className="btn btn-primary" onClick={nextTurn}>Siguiente turno →</button>
             </div>
           )}
@@ -579,9 +619,9 @@ export default function Play({ world, characters, schemaOk, playerName, onCharac
         const saves = deathSaves[c.id] ?? { ok: 0, fail: 0 };
         return (
           <div key={c.id} className="card danger-card">
-            <h3>🆘 {c.name} está a 0 de vida</h3>
+            <h3>{c.name} está a 0 de vida</h3>
             <p>Éxitos: {saves.ok}/3 · Fallos: {saves.fail}/3. Saca 10 o más para un éxito. Un 20 te levanta con 1 de vida. Un 1 son dos fallos.</p>
-            <button className="btn btn-danger" onClick={() => deathSave(c)}>🎲 Tirar para no morir</button>
+            <button className="btn btn-danger" onClick={() => deathSave(c)}>Tirar para no morir</button>
           </div>
         );
       })}
@@ -589,12 +629,12 @@ export default function Play({ world, characters, schemaOk, playerName, onCharac
       {/* Registrar caída y legado */}
       {fallen.filter((c) => fallForm === c.id).map((c) => (
         <div key={c.id} className="card legacy-card">
-          <h3>🪦 {c.name} ha caído</h3>
+          <h3>{c.name} ha caído</h3>
           <p>Su hoja queda sellada para siempre y su nombre no podrá volver a usarse. ¿Qué queda de él en el mundo?</p>
           <div className="chips">
             {(['tumba', 'cancion', 'leyenda', 'objeto', 'lugar'] as const).map((k) => (
               <button key={k} className={`chip ${legacyKind === k ? 'chip-selected' : ''}`} onClick={() => setLegacyKind(k)}>
-                {k === 'tumba' ? '🪦 Tumba' : k === 'cancion' ? '🎵 Canción' : k === 'leyenda' ? '📜 Leyenda' : k === 'objeto' ? '🗡️ Objeto' : '📍 Lugar'}
+                {k === 'tumba' ? 'Tumba' : k === 'cancion' ? 'Canción' : k === 'leyenda' ? 'Leyenda' : k === 'objeto' ? 'Objeto' : 'Lugar'}
               </button>
             ))}
           </div>
@@ -616,7 +656,7 @@ export default function Play({ world, characters, schemaOk, playerName, onCharac
       {dying.map((c) => (
         <div key={`reg-${c.id}`} className="card">
           <button className="btn btn-danger" onClick={() => registerFall(c)}>
-            🪦 Registrar la caída de {c.name} (no hay vuelta atrás)
+            Registrar la caída de {c.name} (no hay vuelta atrás)
           </button>
         </div>
       ))}

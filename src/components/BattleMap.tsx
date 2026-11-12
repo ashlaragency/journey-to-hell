@@ -3,6 +3,7 @@
 // mover hasta 6 casillas (30 pies). La distancia se mide con la regla de
 // Chebyshev: la diagonal cuenta como una sola casilla.
 import { useEffect, useState } from 'react';
+import MonsterPortrait from './MonsterPortrait';
 import {
   supabase,
   type CharacterRow,
@@ -26,17 +27,16 @@ interface EnemyPreset {
   name: string;
   hp: number;
   color: string;
-  icon: string;
 }
 
 // Vida tomada del compendio (MONSTERS) para que coincida con las fichas.
 const ENEMY_PRESETS: EnemyPreset[] = [
-  { name: 'Goblin', hp: 7, color: '#4caf50', icon: '👺' },
-  { name: 'Orco', hp: 15, color: '#795548', icon: '👹' },
-  { name: 'Esqueleto', hp: 13, color: '#bdbdbd', icon: '💀' },
-  { name: 'Lobo', hp: 11, color: '#78909c', icon: '🐺' },
-  { name: 'Bandido', hp: 11, color: '#5c6bc0', icon: '🗡️' },
-  { name: 'Ogro', hp: 59, color: '#a1887f', icon: '🧌' },
+  { name: 'Goblin', hp: 7, color: '#4caf50' },
+  { name: 'Orco', hp: 15, color: '#795548' },
+  { name: 'Esqueleto', hp: 13, color: '#bdbdbd' },
+  { name: 'Lobo', hp: 11, color: '#78909c' },
+  { name: 'Bandido', hp: 11, color: '#5c6bc0' },
+  { name: 'Ogro', hp: 59, color: '#a1887f' },
 ];
 
 const CLASS_ICONS: Record<string, string> = {
@@ -160,7 +160,7 @@ export default function BattleMap({ worldId, characters, schemaOk, mapaInicial }
       color: preset.color,
       hp: preset.hp,
       max_hp: preset.hp,
-      icon: preset.icon,
+      icon: preset.name,
     });
     setShowAddEnemy(false);
   }
@@ -268,8 +268,8 @@ export default function BattleMap({ worldId, characters, schemaOk, mapaInicial }
       : null;
 
   return (
-    <div className="card">
-      <h2>🗺️ Mapa de batalla</h2>
+    <div className="card battle-map">
+      <h2>Mapa de batalla</h2>
       <p>
         Cada casilla son 5 pies. En un turno puedes moverte hasta 6 casillas
         (30 pies). Toca una ficha para seleccionarla y luego toca una casilla
@@ -382,6 +382,7 @@ export default function BattleMap({ worldId, characters, schemaOk, mapaInicial }
         <button
           type="button"
           className="btn"
+          aria-expanded={showAddCharacter}
           onClick={() => {
             setShowAddCharacter((v) => !v);
             setShowAddEnemy(false);
@@ -392,16 +393,18 @@ export default function BattleMap({ worldId, characters, schemaOk, mapaInicial }
         <button
           type="button"
           className="btn"
+          aria-expanded={showAddEnemy}
           onClick={() => {
             setShowAddEnemy((v) => !v);
             setShowAddCharacter(false);
           }}
         >
-          👺 Añadir enemigo
+          Añadir enemigo
         </button>
         <button
           type="button"
           className={measuring ? 'btn chip-selected' : 'btn'}
+          aria-pressed={measuring}
           onClick={() => {
             setMeasuring((v) => !v);
             setMeasurePoints([]);
@@ -438,15 +441,16 @@ export default function BattleMap({ worldId, characters, schemaOk, mapaInicial }
       {showAddEnemy && (
         <div style={{ marginTop: '0.75rem' }}>
           <p>Toca un enemigo para añadirlo al mapa:</p>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+          <div className="enemy-choices">
             {ENEMY_PRESETS.map((preset) => (
               <button
                 key={preset.name}
                 type="button"
-                className="chip"
+                className="enemy-choice"
                 onClick={() => addEnemy(preset)}
               >
-                {preset.icon} {preset.name} ({preset.hp} PV)
+                <MonsterPortrait name={preset.name} />
+                <span><strong>{preset.name}</strong><small>{preset.hp} PV</small></span>
               </button>
             ))}
           </div>
@@ -462,13 +466,14 @@ export default function BattleMap({ worldId, characters, schemaOk, mapaInicial }
         </p>
       )}
 
-      {notice && <p>{notice}</p>}
+      {notice && <p role="status">{notice}</p>}
 
       {selectedToken && (
         <div className="card" style={{ marginTop: '0.75rem' }}>
-          <strong>
-            {selectedToken.icon} {selectedToken.name}
-          </strong>
+          <div className="selected-token-heading">
+            {selectedToken.id.startsWith('enemy-') && <MonsterPortrait name={selectedToken.name} />}
+            <strong>{selectedToken.id.startsWith('pc-') && selectedToken.icon} {selectedToken.name}</strong>
+          </div>
           <div
             style={{
               height: '10px',
@@ -530,7 +535,7 @@ export default function BattleMap({ worldId, characters, schemaOk, mapaInicial }
           maxWidth: '640px',
           marginTop: '1rem',
         }}
-        role="grid"
+        role="group"
         aria-label={`Mapa de batalla de ${gridSize} por ${gridSize} casillas`}
       >
         {Array.from({ length: gridSize * gridSize }, (_, i) => {
@@ -543,10 +548,13 @@ export default function BattleMap({ worldId, characters, schemaOk, mapaInicial }
             <button
               key={`${x}-${y}`}
               type="button"
+              className={token?.id.startsWith('enemy-') ? 'map-enemy-cell' : undefined}
               onClick={() => handleCellClick(x, y)}
+              aria-pressed={isSelected || isMeasurePoint}
+              title={token ? `${token.name} · ${token.hp}/${token.max_hp} PV` : undefined}
               aria-label={
                 token
-                  ? `Casilla ${x + 1}, ${y + 1}: ${token.name}`
+                  ? `Casilla ${x + 1}, ${y + 1}: ${token.name}, ${token.hp} de ${token.max_hp} de vida`
                   : `Casilla ${x + 1}, ${y + 1}: vacía`
               }
               style={{
@@ -574,13 +582,19 @@ export default function BattleMap({ worldId, characters, schemaOk, mapaInicial }
             >
               {token && (
                 <>
-                  <span style={{ fontSize: gridSize > 12 ? '1rem' : '1.25rem' }}>
-                    {token.icon}
-                  </span>
-                  <span style={{ fontWeight: 'bold', textShadow: '0 1px 2px rgba(0,0,0,0.6)' }}>
-                    {shortName(token.name)}
-                  </span>
-                  <span style={{ textShadow: '0 1px 2px rgba(0,0,0,0.6)' }}>
+                  {token.id.startsWith('enemy-') ? (
+                    <MonsterPortrait name={token.name} className="map-token-portrait" />
+                  ) : (
+                    <>
+                      <span style={{ fontSize: gridSize > 12 ? '1rem' : '1.25rem' }}>
+                        {token.icon}
+                      </span>
+                      <span style={{ fontWeight: 'bold', textShadow: '0 1px 2px rgba(0,0,0,0.6)' }}>
+                        {shortName(token.name)}
+                      </span>
+                    </>
+                  )}
+                  <span className={token.id.startsWith('enemy-') ? 'map-token-hp' : undefined} style={{ textShadow: '0 1px 2px rgba(0,0,0,0.6)' }}>
                     {token.hp}/{token.max_hp}
                   </span>
                 </>
