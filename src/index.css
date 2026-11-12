@@ -1,0 +1,225 @@
+/* Journey to Hell — tema oscuro de taberna / pergamino */
+:root {
+  --bg: #17100a;
+  --bg2: #221709;
+  --card: #2a1e12;
+  --card2: #33261a;
+  --gold: #c9a227;
+  --gold-light: #e8c766;
+  --parchment: #f0e6d2;
+  --text: #f0e6d2;
+  --muted: #cbb98f;
+  --red: #b33a2b;
+  --green: #5da24a;
+  --border: #5a4526;
+  font-family: Georgia, 'Times New Roman', serif;
+  color: var(--text);
+  background: var(--bg);
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: radial-gradient(ellipse at top, #2b1d0e 0%, var(--bg) 60%);
+  color: var(--text);
+  min-height: 100vh;
+}
+
+h1, h2, h3 { color: var(--gold-light); margin: 0.3em 0; }
+p { margin: 0.4em 0; line-height: 1.5; }
+
+.app { max-width: 1080px; margin: 0 auto; padding: 12px; }
+
+.hero {
+  text-align: center;
+  padding: 18px 12px 10px;
+  border-bottom: 2px solid var(--gold);
+  margin-bottom: 12px;
+}
+.hero h1 { font-size: 2.2rem; letter-spacing: 1px; margin: 0; }
+.hero p { color: var(--muted); }
+
+.status-row { display: flex; gap: 8px; align-items: center; justify-content: center; font-size: 0.9rem; flex-wrap: wrap; }
+.status-dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+.status-dot.ok { background: var(--green); box-shadow: 0 0 8px var(--green); }
+.status-dot.bad { background: var(--red); box-shadow: 0 0 8px var(--red); }
+
+.name-picker { display: flex; gap: 8px; justify-content: center; align-items: center; margin-top: 12px; flex-wrap: wrap; }
+
+.tabs { display: flex; gap: 6px; flex-wrap: wrap; margin: 12px 0; }
+.tab {
+  flex: 1 1 auto;
+  padding: 10px 8px;
+  background: var(--card);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 1rem;
+  cursor: pointer;
+  font-family: inherit;
+}
+.tab-active { background: var(--gold); color: #1a120a; font-weight: bold; border-color: var(--gold); }
+
+main { display: flex; flex-direction: column; gap: 12px; }
+
+.card {
+  background: linear-gradient(180deg, var(--card) 0%, var(--card2) 100%);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+}
+
+.btn {
+  background: var(--card2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 1rem;
+  cursor: pointer;
+  font-family: inherit;
+}
+.btn:hover { border-color: var(--gold); }
+.btn-primary { background: var(--gold); color: #1a120a; font-weight: bold; border-color: var(--gold); }
+.btn-danger { background: #5c1a12; border-color: #8a2a1d; color: #ffd9d0; }
+.btn-action {
+  background: #3d2c14;
+  border: 2px solid var(--gold);
+  border-radius: 12px;
+  padding: 16px 12px;
+  font-size: 1.1rem;
+  text-align: left;
+}
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.grid-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; margin-top: 12px; }
+.grid-actions { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; margin: 12px 0; }
+
+.chips { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0; }
+.chip {
+  background: var(--card2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 8px 14px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.95rem;
+}
+.chip-selected { background: var(--gold); color: #1a120a; font-weight: bold; }
+
+input, select, textarea {
+  width: 100%;
+  padding: 10px;
+  margin: 6px 0;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: #1c130a;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 1rem;
+}
+label { display: block; font-size: 0.95rem; color: var(--muted); }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+.hint { color: var(--muted); font-size: 0.92rem; }
+.badge {
+  background: var(--gold);
+  color: #1a120a;
+  border-radius: 12px;
+  padding: 2px 8px;
+  font-size: 0.8rem;
+  font-weight: bold;
+}
+.banner-warning {
+  background: #4a2c08;
+  border: 1px solid var(--gold);
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 12px;
+}
+
+.hp-bar { height: 12px; background: #1c130a; border-radius: 6px; overflow: hidden; border: 1px solid var(--border); margin: 6px 0; }
+.hp-bar div { height: 100%; background: linear-gradient(90deg, #7a1f14, #c0392b); transition: width 0.3s; }
+
+.scene-card { border: 2px solid var(--gold); }
+.narration { font-size: 1.15rem; font-style: italic; }
+.world-tag { color: var(--gold); font-size: 0.9rem; }
+.scene-progress { color: var(--muted); font-size: 0.9rem; }
+.char-status { background: #1c130a; border-radius: 8px; padding: 8px; }
+
+.result-card { border: 2px solid var(--green); background: #1e2b16; }
+.danger-card { border: 2px solid var(--red); background: #2b130e; }
+.combat-card { border: 2px solid var(--red); }
+.combatants { display: flex; flex-direction: column; gap: 8px; margin: 10px 0; }
+.combatant { background: #1c130a; border-radius: 8px; padding: 8px; display: flex; flex-direction: column; gap: 4px; }
+.combatant.active-turn { border: 2px solid var(--gold); }
+.combatant.down { opacity: 0.55; }
+.combat-log { background: #1c130a; border-radius: 8px; padding: 8px; margin: 10px 0; font-size: 0.95rem; }
+
+.char-card.fallen { opacity: 0.75; border-color: #555; }
+.fallen-note { color: #d8b4a8; font-style: italic; }
+
+.world-header { border: 2px solid var(--gold); }
+.law { background: #1c130a; border-left: 4px solid var(--gold); padding: 10px; border-radius: 0 8px 8px 0; }
+.adventure, .legacy, .event, .journal { border-top: 1px solid var(--border); padding: 10px 0; }
+
+.dice-box { text-align: center; }
+.dice-result { font-size: 3rem; font-weight: bold; color: var(--gold-light); }
+.dice-rolling { animation: shake 0.12s infinite; }
+@keyframes shake {
+  0% { transform: translate(0, 0) rotate(0deg); }
+  25% { transform: translate(3px, -3px) rotate(8deg); }
+  50% { transform: translate(-3px, 3px) rotate(-8deg); }
+  75% { transform: translate(3px, 3px) rotate(5deg); }
+  100% { transform: translate(0, 0) rotate(0deg); }
+}
+.dice-faces { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; margin-top: 8px; }
+.dice-face {
+  width: 40px; height: 40px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--parchment); color: #1a120a;
+  border-radius: 8px; font-weight: bold; font-size: 1.2rem;
+  border: 2px solid var(--gold);
+}
+.roll-log { text-align: left; font-size: 0.92rem; max-height: 220px; overflow-y: auto; }
+
+.map-grid { display: grid; gap: 2px; background: #1c130a; padding: 6px; border-radius: 10px; overflow-x: auto; }
+.map-cell {
+  aspect-ratio: 1;
+  min-width: 34px;
+  background: #3a2a16;
+  border: 1px solid #4a3820;
+  border-radius: 4px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; font-size: 1.3rem; position: relative;
+}
+.map-cell:hover { background: #4a3820; }
+.map-cell.selected { outline: 3px solid var(--gold); }
+.map-cell .token-hp { position: absolute; bottom: 1px; left: 2px; right: 2px; height: 4px; background: #000; border-radius: 2px; }
+.map-cell .token-hp div { height: 100%; background: #c0392b; border-radius: 2px; }
+.map-bg-mazmorra .map-cell { background: #2c2c34; border-color: #444; }
+.map-bg-bosque .map-cell { background: #1e3a1e; border-color: #2c522c; }
+.map-bg-taberna .map-cell { background: #4a2e12; border-color: #6a4520; }
+.map-bg-nieve .map-cell { background: #cfd8dc; border-color: #90a4ae; color: #222; }
+
+.flash {
+  position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+  background: var(--gold); color: #1a120a; font-weight: bold;
+  padding: 10px 18px; border-radius: 20px; z-index: 50;
+}
+
+footer { text-align: center; color: var(--muted); font-size: 0.85rem; padding: 20px 0; }
+
+.wizard-steps { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 12px; }
+.wizard-step { flex: 1; min-width: 60px; text-align: center; font-size: 0.8rem; padding: 6px 2px; border-radius: 8px; background: var(--card2); color: var(--muted); }
+.wizard-step.current { background: var(--gold); color: #1a120a; font-weight: bold; }
+.wizard-step.done { background: #3d5a2e; color: #d8e8c8; }
+
+@media (max-width: 640px) {
+  .hero h1 { font-size: 1.6rem; }
+  .grid-actions { grid-template-columns: 1fr 1fr; }
+  .btn-action { font-size: 1rem; padding: 12px 8px; }
+}
