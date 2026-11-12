@@ -9,6 +9,8 @@ import {
   type CharacterRow,
 } from './lib/supabase';
 import Play from './components/Play';
+import SoundControls from './components/SoundControls';
+import { playSound, unlockAudio } from './lib/audio';
 import DiceTray from './components/DiceTray';
 import type { MapaAtlas } from './lib/atlas';
 
@@ -68,6 +70,11 @@ export default function App() {
     fetchAll();
   }
 
+  function navigate(nextTab: Tab) {
+    if (nextTab !== tab) playSound('page');
+    setTab(nextTab);
+  }
+
   function saveName() {
     const n = nameInput.trim();
     if (!n) return;
@@ -83,10 +90,12 @@ export default function App() {
   }
 
   return (
-    <div className="app">
+    <div className="app" onClickCapture={() => unlockAudio()} onKeyDownCapture={(event) => {
+      if (!event.repeat) unlockAudio();
+    }}>
         <a className="skip-link" href="#contenido">Ir al contenido</a>
       <aside className="sidebar">
-        <button className="brand" onClick={() => setTab('jugar')} aria-label="Journey to Hell, ir a Jugar">
+        <button className="brand" onClick={() => navigate('jugar')} aria-label="Journey to Hell, ir a Jugar">
           <span className="brand-sigil" aria-hidden="true">J</span>
           <span>Journey<span className="brand-second">to Hell</span></span>
         </button>
@@ -100,7 +109,7 @@ export default function App() {
             ['compendio', 'Compendio', '▤'],
           ] as [Tab, string, string][]).map(([id, label, icon]) => (
             <button key={id} className={`tab ${tab === id ? 'tab-active' : ''}`}
-              aria-current={tab === id ? 'page' : undefined} onClick={() => setTab(id)}>
+              aria-current={tab === id ? 'page' : undefined} onClick={() => navigate(id)}>
               <span className="nav-icon" aria-hidden="true">{icon}</span>
               {label}
               {id === 'personajes' && <span className="nav-count">{living.length}</span>}
@@ -124,9 +133,12 @@ export default function App() {
             <p className="world-name">{world?.name ?? 'Journey to Hell'}</p>
             <h1>{{ jugar: 'La aventura', personajes: 'La compañía', mundo: 'El mundo vivo', mapa: 'Mesa de batalla', atlas: 'Atlas del descenso', compendio: 'El compendio' }[tab]}</h1>
           </div>
-          <div className="status-row" role="status">
-            <span className={`status-dot ${schemaOk ? 'ok' : 'bad'}`} />
-            <span>{schemaOk ? 'Mundo conectado' : 'Conexión interrumpida'}</span>
+          <div className="header-tools">
+            <SoundControls />
+            <div className="status-row" role="status">
+              <span className={`status-dot ${schemaOk ? 'ok' : 'bad'}`} />
+              <span>{schemaOk ? 'Mundo conectado' : 'Conexión interrumpida'}</span>
+            </div>
           </div>
         </header>
         {!playerName && (
@@ -168,7 +180,7 @@ export default function App() {
                     </li>
                   ))}
                 </ul>
-                <button className="btn party-link" onClick={() => { setTab('personajes'); if (!living.length) setShowCreator(true); }}>
+                <button className="btn party-link" onClick={() => { navigate('personajes'); if (!living.length) setShowCreator(true); }}>
                   {living.length ? 'Ver personajes' : 'Crear mi personaje'}
                 </button>
               </section>
@@ -275,7 +287,7 @@ export default function App() {
             <Atlas
               onAbrirMapa={(m) => {
                 setMapaAtlas(m);
-                setTab('mapa');
+                navigate('mapa');
               }}
             />
           )}

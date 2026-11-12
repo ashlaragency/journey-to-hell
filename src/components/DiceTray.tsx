@@ -1,5 +1,6 @@
 // Bandeja de dados para "Journey to Hell": tira dados, anima el resultado,
 // lo guarda en Supabase y muestra las últimas tiradas del mundo en vivo.
+import { playSound } from '../lib/audio';
 import { useEffect, useRef, useState } from 'react';
 import { supabase, saveRoll, parseAndRoll, type CharacterRow } from '../lib/supabase';
 
@@ -122,6 +123,7 @@ export default function DiceTray({ worldId, playerName, characterName }: DiceTra
 
   function handleRoll() {
     if (rolling) return;
+    playSound('dice');
     stopAnimationTimers();
     setRolling(true);
     setFaces(null);

@@ -2,6 +2,7 @@
 // Reglas de movimiento: cada casilla son 5 pies; en un turno se pueden
 // mover hasta 6 casillas (30 pies). La distancia se mide con la regla de
 // Chebyshev: la diagonal cuenta como una sola casilla.
+import { playSound } from '../lib/audio';
 import { useEffect, useState } from 'react';
 import MonsterPortrait from './MonsterPortrait';
 import {
@@ -120,17 +121,20 @@ export default function BattleMap({ worldId, characters, schemaOk, mapaInicial }
     const cell = firstFreeCell();
     if (!cell) {
       setNotice('⚠️ El mapa está lleno: no queda ninguna casilla libre.');
+      playSound('failure');
       return;
     }
     setTokens((prev) => [...prev, { ...token, x: cell.x, y: cell.y }]);
     setSelectedId(token.id);
     setNotice(null);
+    playSound('select');
   }
 
   function addCharacter(character: CharacterRow) {
     const id = `pc-${character.id}`;
     if (tokens.some((t) => t.id === id)) {
       setNotice(`⚠️ ${character.name} ya está en el mapa.`);
+      playSound('failure');
       return;
     }
     const icon =
@@ -177,6 +181,7 @@ export default function BattleMap({ worldId, characters, schemaOk, mapaInicial }
     if (token) {
       setSelectedId(token.id);
       setNotice(null);
+      playSound('select');
       return;
     }
 
@@ -189,6 +194,7 @@ export default function BattleMap({ worldId, characters, schemaOk, mapaInicial }
       setTokens((prev) =>
         prev.map((t) => (t.id === selectedToken.id ? { ...t, x, y } : t)),
       );
+      playSound('move');
       if (distance > 6) {
         setNotice(
           `⚠️ Eso es más de lo que puede moverse en un turno (30 pies): moviste ${distance} casillas (${distance * 5} pies).`,
@@ -239,6 +245,7 @@ export default function BattleMap({ worldId, characters, schemaOk, mapaInicial }
   async function saveMap() {
     if (!schemaOk) {
       setNotice('⚠️ No se puede guardar: las tablas de Supabase aún no están listas (falta aplicar el SQL).');
+      playSound('failure');
       return;
     }
     setSaving(true);
@@ -252,7 +259,9 @@ export default function BattleMap({ worldId, characters, schemaOk, mapaInicial }
     setSaving(false);
     if (error) {
       setNotice(`⚠️ No se pudo guardar el mapa: ${error.message}`);
+      playSound('failure');
     } else {
+      playSound('success');
       setNotice(`✅ Mapa "${mapName.trim() || 'Mapa 1'}" guardado con ${tokens.length} ficha${tokens.length === 1 ? '' : 's'}.`);
     }
   }

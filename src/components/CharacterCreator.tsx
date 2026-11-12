@@ -1,6 +1,7 @@
 // Creador guiado de personaje para "Journey to Hell".
 // Regla dura: el único campo que se escribe en todo el flujo es el nombre.
 // Todo lo demás se elige tocando tarjetas, chips o botones.
+import { playSound } from '../lib/audio';
 import { useState } from 'react';
 import {
   SPECIES,
@@ -256,6 +257,7 @@ export default function CharacterCreator({
       .single();
     setCreating(false);
     if (insertError) {
+      playSound('failure');
       if (insertError.code === '23505') {
         setError('Ese nombre ya lo usó un héroe (vivo o caído) y no se puede repetir. Elige otro nombre.');
       } else {
@@ -263,6 +265,7 @@ export default function CharacterCreator({
       }
       return;
     }
+    playSound('success');
     onCreated(data as CharacterRow);
   }
 

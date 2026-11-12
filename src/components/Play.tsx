@@ -1,6 +1,7 @@
 // Sección Jugar: un solo recorrido lineal guiado.
 // Escena arriba, pregunta "¿Qué haces?" con opciones grandes, resultado en
 // palabras simples, botón Continuar. Combate con enemigos precargados.
+import { playSound } from '../lib/audio';
 import { useEffect, useMemo, useState } from 'react';
 import {
   supabase,
@@ -174,6 +175,7 @@ export default function Play({ world, characters, schemaOk, playerName, onCharac
       ? 'Descubres algo útil: un detalle, una pista o un camino que no se veía antes.'
       : 'No encuentras nada esta vez. El lugar guarda su secreto… por ahora.';
     setResult(`${verdict} ${story}`);
+    playSound(ok ? 'success' : 'failure');
     await saveRoll({
       world_id: world?.id ?? null,
       player_name: playerName,
@@ -222,7 +224,7 @@ export default function Play({ world, characters, schemaOk, playerName, onCharac
     setCombat(row);
     setResult(null);
     if (schemaOk && world) {
-      await supabase.from('combat').insert({
+      const { error } = await supabase.from('combat').insert({
         id: row.id,
         world_id: world.id,
         adventure_id: row.adventure_id,
@@ -232,17 +234,30 @@ export default function Play({ world, characters, schemaOk, playerName, onCharac
         combatants,
         log: row.log,
       });
+      if (error) {
+        setCombat((current) => current?.id === row.id ? null : current);
+        setResult('No se pudo iniciar la pelea. Inténtalo de nuevo.');
+        playSound('failure');
+        return;
+      }
     }
+    playSound('combat');
   }
 
-  async function endCombat(msg: string) {
+  async function endCombat(msg: string, sound: 'success' | 'failure' | 'select' = 'select') {
     if (!combat) return;
     const next = { ...combat, active: false, log: [...combat.log, msg] };
     if (schemaOk) {
-      await supabase.from('combat').update({ active: false, log: next.log }).eq('id', combat.id);
+      const { error } = await supabase.from('combat').update({ active: false, log: next.log }).eq('id', combat.id);
+      if (error) {
+        setResult('No se pudo guardar el final de la pelea. Inténtalo de nuevo.');
+        playSound('failure');
+        return;
+      }
     }
     setCombat(next);
     setResult(msg);
+    playSound(sound);
     if (schemaOk && world) {
       await supabase.from('journal_entries').insert({
         world_id: world.id,
@@ -264,11 +279,11 @@ export default function Play({ world, characters, schemaOk, playerName, onCharac
     const pcsAlive = alive.some((c) => c.kind === 'pc');
     const enemiesAlive = alive.some((c) => c.kind === 'enemy');
     if (!pcsAlive) {
-      await endCombat('Todos los héroes cayeron. El mundo sigue… y recordará esta derrota.');
+      await endCombat('Todos los héroes cayeron. El mundo sigue… y recordará esta derrota.', 'failure');
       return;
     }
     if (!enemiesAlive) {
-      await endCombat('¡Victoria! Todos los enemigos cayeron. La aventura continúa.');
+      await endCombat('¡Victoria! Todos los enemigos cayeron. La aventura continúa.', 'success');
       return;
     }
     let idx = (combat.turn_index + 1) % combat.combatants.length;
@@ -278,6 +293,7 @@ export default function Play({ world, characters, schemaOk, playerName, onCharac
       guard++;
     }
     const round = idx <= combat.turn_index ? combat.round + 1 : combat.round;
+    playSound('select');
     await persistCombat({ ...combat, turn_index: idx, round });
   }
 
@@ -291,6 +307,7 @@ export default function Play({ world, characters, schemaOk, playerName, onCharac
     const attack = d20 + proficiencyBonus(activeChar.level) + mod;
     let logLine = '';
     let combatants = [...combat.combatants];
+    playSound(attack >= target.ac ? 'hit' : 'miss');
     if (attack >= target.ac) {
       const { total: dmg, detail } = parseAndRoll(`${weapon.dice}${mod >= 0 ? '+' : ''}${mod}`);
       const t = combatants.find((c) => c.ref_id === target.ref_id);
@@ -323,6 +340,7 @@ export default function Play({ world, characters, schemaOk, playerName, onCharac
     const attack = d20 + (enemy?.attack_bonus ?? 2);
     let combatants = [...combat.combatants];
     let logLine = '';
+    playSound(attack >= target.ac ? 'hit' : 'miss');
     if (attack >= target.ac) {
       const { total: dmg, detail } = parseAndRoll(enemy?.damage_dice ?? '1d6');
       const t = combatants.find((c) => c.ref_id === target.ref_id);
@@ -384,10 +402,18 @@ export default function Play({ world, characters, schemaOk, playerName, onCharac
 
   async function registerFall(char: CharacterRow) {
     if (!schemaOk) return;
-    await supabase
+    const { error } = await supabase
       .from('characters')
       .update({ status: 'caido', hp: 0, death_note: `Cayó en ${adventure?.name ?? 'el mundo'}.` })
-      .eq('id', char.id);
+      .eq('id', char.id)
+      .select('id')
+      .single();
+    if (error) {
+      setResult('No se pudo registrar la caída. Inténtalo de nuevo.');
+      playSound('failure');
+      return;
+    }
+    playSound('death');
     onCharactersChange();
     setFallForm(char.id);
   }
@@ -524,6 +550,7 @@ export default function Play({ world, characters, schemaOk, playerName, onCharac
               className="btn btn-action"
               disabled={!adventure || sceneIdx >= adventure.scenes.length - 1}
               onClick={() => {
+                playSound('page');
                 setSceneIdx((i) => Math.min(i + 1, (adventure?.scenes.length ?? 1) - 1));
                 setResult('Avanzas al siguiente lugar. ¿Qué ves ahora?');
               }}
