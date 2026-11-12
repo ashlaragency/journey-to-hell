@@ -1,5 +1,6 @@
 // Cliente de Supabase (solo clave anon pública) y tipos del juego.
 import { createClient } from '@supabase/supabase-js';
+import type { CombatAttackEvent } from './combatEffects';
 
 export const SUPABASE_URL =
   import.meta.env.VITE_SUPABASE_URL ?? 'https://lewyzkdhwrdiiorwsfgh.supabase.co';
@@ -92,6 +93,7 @@ export interface EnemyRow {
 
 export interface Combatant {
   kind: 'pc' | 'enemy';
+  last_attack?: CombatAttackEvent;
   ref_id: string;
   name: string;
   initiative: number;

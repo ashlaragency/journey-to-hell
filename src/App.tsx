@@ -13,17 +13,34 @@ import SoundControls from './components/SoundControls';
 import { playSound, unlockAudio } from './lib/audio';
 import DiceTray from './components/DiceTray';
 import type { MapaAtlas } from './lib/atlas';
+import GameIcon from './components/GameIcon';
+import WorldActivity from './components/WorldActivity';
+import CombatEffects from './components/CombatEffects';
+import { useSession } from './hooks/useSession';
+import { useTablePresence } from './hooks/useTablePresence';
+import './LivingShell.css';
 
 const CharacterCreator = lazy(() => import('./components/CharacterCreator'));
 const BattleMap = lazy(() => import('./components/BattleMap'));
 const Atlas = lazy(() => import('./components/Atlas'));
 const Compendium = lazy(() => import('./components/Compendium'));
+const Infernalista = lazy(() => import('./components/Infernalista'));
 const WorldPanel = lazy(() => import('./components/WorldPanel'));
 
-type Tab = 'jugar' | 'personajes' | 'mundo' | 'mapa' | 'atlas' | 'compendio';
+type Tab = 'infernalista' | 'jugar' | 'personajes' | 'mundo' | 'mapa' | 'atlas' | 'compendio';
+
+function readPreference(key: string) {
+  try { return localStorage.getItem(key); } catch { return null; }
+}
+function savePreference(key: string, value: string) {
+  try { localStorage.setItem(key, value); } catch { /* La sesión funciona sin almacenamiento local. */ }
+}
 
 export default function App() {
-  const [tab, setTab] = useState<Tab>('jugar');
+  const [role, setRole] = useState<'aventurero' | 'infernalista'>(() => readPreference('jth_role') === 'infernalista' ? 'infernalista' : 'aventurero');
+  const [tab, setTab] = useState<Tab>(() => readPreference('jth_role') === 'infernalista' ? 'infernalista' : 'jugar');
+  const [motionPaused, setMotionPaused] = useState(() => readPreference('jth_motion') === 'paused');
+  const [pageHidden, setPageHidden] = useState(document.hidden);
   const [playerName, setPlayerNameState] = useState(getPlayerName());
   const [nameInput, setNameInput] = useState('');
   const [world, setWorld] = useState<World | null>(null);
@@ -33,13 +50,23 @@ export default function App() {
   const [showCreator, setShowCreator] = useState(false);
   const [hpFlash, setHpFlash] = useState<string | null>(null);
   const [mapaAtlas, setMapaAtlas] = useState<MapaAtlas | null>(null);
+  const session = useSession(world?.id, schemaOk);
+  const presence = useTablePresence(world?.id, schemaOk, playerName, role);
+  const sharedScene = session.cue?.payload.active ? { id: session.cue.id, ...session.cue.payload } : null;
+  useEffect(() => {
+    const onVisibility = () => setPageHidden(document.hidden);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+  }, []);
 
   const fetchAll = async () => {
     const { data: w } = await supabase.from('worlds').select('*').limit(1);
-    if (w && w.length > 0) setWorld(w[0] as World);
+    if (!w?.length) return;
+    setWorld(w[0] as World);
     const { data: chars } = await supabase
       .from('characters')
       .select('*')
+      .eq('world_id', w[0].id)
       .order('created_at', { ascending: true });
     if (chars) setCharacters(chars as CharacterRow[]);
   };
@@ -64,7 +91,13 @@ export default function App() {
   async function changeHp(c: CharacterRow, delta: number) {
     const next = Math.max(0, Math.min(c.max_hp, c.hp + delta));
     if (!schemaOk) return;
-    await supabase.from('characters').update({ hp: next }).eq('id', c.id);
+    if (c.status !== 'vivo') return;
+    const { error } = await supabase.from('characters').update({ hp: next }).eq('id', c.id).eq('status', 'vivo').eq('hp', c.hp).select('id').single();
+    if (error) {
+      setHpFlash('No se pudo guardar la vida. Actualiza la hoja e inténtalo de nuevo.');
+      void fetchAll();
+      return;
+    }
     setHpFlash(`${c.name}: ${next}/${c.max_hp}`);
     setTimeout(() => setHpFlash(null), 1500);
     fetchAll();
@@ -74,6 +107,14 @@ export default function App() {
     if (nextTab !== tab) playSound('page');
     setTab(nextTab);
   }
+
+  function chooseRole(next: 'aventurero' | 'infernalista') {
+    setRole(next);
+    savePreference('jth_role', next);
+    navigate(next === 'infernalista' ? 'infernalista' : 'jugar');
+  }
+
+  function openCreator() { navigate('personajes'); setShowCreator(true); }
 
   function saveName() {
     const n = nameInput.trim();
@@ -90,57 +131,63 @@ export default function App() {
   }
 
   return (
-    <div className="app" onClickCapture={() => unlockAudio()} onKeyDownCapture={(event) => {
+    <div className={`app living-app view-${tab} ${motionPaused || pageHidden ? 'motion-paused' : ''}`} onClickCapture={() => unlockAudio()} onKeyDownCapture={(event) => {
       if (!event.repeat) unlockAudio();
     }}>
+        <CombatEffects worldId={world?.id} schemaOk={schemaOk} motionPaused={motionPaused || pageHidden} />
         <a className="skip-link" href="#contenido">Ir al contenido</a>
       <aside className="sidebar">
-        <button className="brand" onClick={() => navigate('jugar')} aria-label="Journey to Hell, ir a Jugar">
+        <button className="brand" onClick={() => navigate(role === 'infernalista' ? 'infernalista' : 'jugar')} aria-label="Journey to Hell, ir al inicio">
           <span className="brand-sigil" aria-hidden="true">J</span>
-          <span>Journey<span className="brand-second">to Hell</span></span>
+          <span>Journey <span className="brand-second">to Hell</span></span>
         </button>
         <nav className="tabs" aria-label="Navegación principal">
           {([
-            ['jugar', 'Jugar', '◇'],
-            ['personajes', 'Personajes', '♙'],
-            ['mundo', 'Mundo', '◎'],
-            ['mapa', 'Mapa', '⌖'],
-            ['atlas', 'Atlas', '✧'],
-            ['compendio', 'Compendio', '▤'],
-          ] as [Tab, string, string][]).map(([id, label, icon]) => (
+            [role === 'infernalista' ? 'infernalista' : 'jugar', role === 'infernalista' ? 'Mi grimorio' : 'Aventura', role === 'infernalista' ? 'crown' : 'play'],
+            ['mapa', 'Mesa', 'map'],
+            ['personajes', 'Compañía', 'people'],
+            ['atlas', 'Atlas', 'atlas'],
+            ['mundo', 'Crónica', 'world'],
+            ['compendio', 'Bestiario', 'book'],
+          ] as const).map(([id, label, icon]) => (
             <button key={id} className={`tab ${tab === id ? 'tab-active' : ''}`}
               aria-current={tab === id ? 'page' : undefined} onClick={() => navigate(id)}>
-              <span className="nav-icon" aria-hidden="true">{icon}</span>
-              {label}
-              {id === 'personajes' && <span className="nav-count">{living.length}</span>}
+              <GameIcon name={icon} />
+              <span>{label}</span>
             </button>
           ))}
         </nav>
-        <div className="sidebar-world">
-          <span className="world-seal" aria-hidden="true">∞</span>
-          <p>Un mundo. Una vida.</p>
-          <small>La muerte es permanente.<br />Tu legado permanece.</small>
-        </div>
         <div className="sidebar-player">
           <span className="character-avatar" aria-hidden="true">{playerName.slice(0, 1).toUpperCase() || 'V'}</span>
-          <div><strong>{playerName || 'Viajero'}</strong><small>{playerName ? 'Tu lugar en la historia' : 'Entra al mundo'}</small></div>
+          <div><strong>{playerName || 'Viajero'}</strong><small>{role === 'infernalista' ? 'Infernalista' : 'Aventurero'}</small></div>
         </div>
       </aside>
 
       <div className="workspace">
         <header className="workspace-header">
           <div>
-            <p className="world-name">{world?.name ?? 'Journey to Hell'}</p>
-            <h1>{{ jugar: 'La aventura', personajes: 'La compañía', mundo: 'El mundo vivo', mapa: 'Mesa de batalla', atlas: 'Atlas del descenso', compendio: 'El compendio' }[tab]}</h1>
+            <p className="world-name">Un mundo. Una vida. Tu historia.</p>
+            <h1>{{ jugar: 'La aventura continúa', infernalista: 'La mesa del Infernalista', personajes: 'La compañía', mundo: 'El mundo vivo', mapa: 'La mesa encantada', atlas: 'Atlas del descenso', compendio: 'El compendio' }[tab]}</h1>
+          </div>
+          <div className="role-switch" role="group" aria-label="Tu lugar en la mesa">
+            <button onClick={() => chooseRole('aventurero')} aria-pressed={role === 'aventurero'}><GameIcon name="play" /> Aventurero</button>
+            <button onClick={() => chooseRole('infernalista')} aria-pressed={role === 'infernalista'}><GameIcon name="crown" /> Infernalista</button>
           </div>
           <div className="header-tools">
+            <button className="motion-toggle" aria-pressed={motionPaused} aria-label={motionPaused ? 'Activar movimiento ambiental' : 'Pausar movimiento ambiental'} title={motionPaused ? 'Activar movimiento' : 'Pausar movimiento'} onClick={() => {
+              setMotionPaused(!motionPaused); savePreference('jth_motion', motionPaused ? 'running' : 'paused');
+            }}><GameIcon name={motionPaused ? 'play' : 'pause'} /></button>
             <SoundControls />
             <div className="status-row" role="status">
-              <span className={`status-dot ${schemaOk ? 'ok' : 'bad'}`} />
-              <span>{schemaOk ? 'Mundo conectado' : 'Conexión interrumpida'}</span>
+              <span className={`status-dot ${schemaOk && session.connected ? 'ok' : 'bad'}`} />
+              <span>{!schemaOk ? 'Sin conexión' : session.connected ? 'Mundo en vivo' : 'Reconectando…'}</span>
             </div>
           </div>
         </header>
+        <div className="table-presence" aria-label="Presencia en la mesa">
+          <span className="presence-title"><span className={`status-dot ${presence.connected ? 'ok' : 'bad'}`} />{presence.connected ? `${presence.members.length} ${presence.members.length === 1 ? 'persona' : 'personas'} en la mesa` : 'Conectando la mesa…'}</span>
+          <div className="presence-members">{presence.members.slice(0, 6).map((member) => <span key={member.id} title={`${member.name} · ${member.role}`}><i aria-hidden="true">{member.name.charAt(0)}</i>{member.name}{member.role === 'infernalista' && <GameIcon name="crown" />}</span>)}</div>
+        </div>
         {!playerName && (
           <form className="name-picker" onSubmit={(event) => { event.preventDefault(); saveName(); }}>
             <label htmlFor="player-name">Tu nombre de jugador</label>
@@ -154,6 +201,7 @@ export default function App() {
       {hpFlash && <div className="flash" role="status">{hpFlash}</div>}
 
       <main id="contenido" tabIndex={-1}>
+        {session.error && <div className="banner-warning" role="status">{session.error} <button className="btn" onClick={() => void session.refresh()}>Reintentar</button></div>}
         {tab === 'jugar' && (
           <div className="dashboard-layout">
             <Play
@@ -162,8 +210,12 @@ export default function App() {
               schemaOk={schemaOk}
               playerName={playerName}
               onCharactersChange={fetchAll}
+              sharedScene={sharedScene}
+              onCreateCharacter={openCreator}
+              onOpenMap={() => navigate('mapa')}
             />
             <aside className="session-panel" aria-label="Compañía y dados">
+              <WorldActivity worldId={world?.id} enabled={schemaOk} />
               <section className="party-panel card">
                 <div className="section-heading"><h2>Tu compañía</h2><span className="party-count">{living.length}</span></div>
                 {living.length === 0 && <p className="hint">El mundo espera a su primer héroe.</p>}
@@ -184,7 +236,7 @@ export default function App() {
                   {living.length ? 'Ver personajes' : 'Crear mi personaje'}
                 </button>
               </section>
-              <DiceTray key={world?.id} worldId={world?.id ?? null} playerName={playerName} characterName={null} />
+              <details className="dice-dock" id="dados"><summary><GameIcon name="spark" /><span>Los dados del destino<small>Abre tu mesa de tiradas</small></span><span aria-hidden="true">＋</span></summary><DiceTray key={world?.id} worldId={world?.id ?? null} playerName={playerName} characterName={null} /></details>
             </aside>
           </div>
         )}
@@ -256,7 +308,7 @@ export default function App() {
                   )}
                   {c.status === 'caido' && (
                     <p className="fallen-note">
-                      ☠️ Caído. {c.death_note ?? 'Su historia quedó en el mundo.'} Su nombre no se puede volver a usar.
+                      † Caído. {c.death_note ?? 'Su historia quedó en el mundo.'} Su nombre no se puede volver a usar.
                     </p>
                   )}
                 </div>
@@ -272,6 +324,7 @@ export default function App() {
         )}
 
         <Suspense fallback={<p role="status">Cargando sección…</p>}>
+          {tab === 'infernalista' && <Infernalista world={world} characters={characters} schemaOk={schemaOk} playerName={playerName} onOpenMap={() => navigate('mapa')} onOpenPlay={() => navigate('jugar')} />}
           {tab === 'mundo' && <WorldPanel world={world} schemaOk={schemaOk} playerName={playerName} />}
 
           {tab === 'mapa' && (
@@ -296,6 +349,10 @@ export default function App() {
         </Suspense>
       </main>
 
+      {tab === 'jugar' && <button className="quick-dice" onClick={() => {
+        const dice = document.getElementById('dados') as HTMLDetailsElement | null;
+        if (dice) { dice.open = true; dice.scrollIntoView({ behavior: motionPaused || window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth', block: 'center' }); dice.querySelector('summary')?.focus({ preventScroll: true }); }
+      }}><GameIcon name="spark" /> Tirar dados</button>}
       <footer>
         <span>Journey to Hell</span>
         <span>La historia continúa con cada decisión.</span>

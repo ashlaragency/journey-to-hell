@@ -46,11 +46,11 @@ export default function SoundControls() {
           Probar sonido
         </button>
         <p className="hint sound-feedback" role="status">
-          {!settings.enabled && 'Actívalo para escuchar las acciones del juego.'}
+          {!settings.enabled && 'Actívalo para escuchar tus acciones y los ataques de toda la mesa.'}
           {settings.enabled && settings.status === 'loading' && 'Preparando los sonidos…'}
           {settings.enabled && settings.status === 'unavailable' && 'No se pudo activar el audio en este navegador.'}
           {settings.enabled && settings.status !== 'loading' && settings.status !== 'unavailable' &&
-            'Dados, combate y acciones del juego.'}
+            'Los ataques de la mesa se escuchan en tiempo real. Tu volumen solo cambia aquí.'}
         </p>
         {settings.enabled && settings.status === 'unavailable' && (
           <button type="button" className="btn sound-preview" onClick={() => setSoundEnabled(true)}>

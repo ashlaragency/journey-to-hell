@@ -1,0 +1,44 @@
+.combat-effect-layer { position: fixed; z-index: 80; inset: 0; pointer-events: none; overflow: hidden; }
+.combat-effect-strike { position: absolute; width: min(680px, 90vw); height: min(420px, 60vh); left: 50%; top: 46%; transform: translate(-50%, -50%); color: #ecc48b; }
+.combat-effect-slash { position: absolute; width: 100%; height: 100%; overflow: visible; transform: rotate(-8deg); }
+.effect-arc-shadow { fill: #8b351f66; filter: blur(10px); transform-origin: center; animation: effect-slash .75s cubic-bezier(.16,.7,.25,1) both; }
+.effect-arc { fill: #d79b5670; stroke: #efbd7b; stroke-width: 1.2; transform-origin: center; animation: effect-slash .75s cubic-bezier(.16,.7,.25,1) both; }
+.effect-trail { fill: none; stroke: #ffe1a9; stroke-width: 3; stroke-linecap: round; stroke-dasharray: 650; stroke-dashoffset: 650; animation: effect-trail .55s ease-out both; }
+.combat-effect-ripple { position: absolute; left: 45%; top: 47%; width: 95px; height: 95px; border: 2px solid #e3ab6f; border-radius: 50%; transform: translate(-50%,-50%); animation: effect-ripple .85s .1s ease-out both; }
+.combat-effect-spark { position: absolute; left: 45%; top: 47%; width: 4px; height: 32px; background: linear-gradient(#f9cd89, transparent); transform-origin: center; animation: effect-spark .7s .12s ease-out both; }
+.spark-one { --spark-x: -60px; --spark-y: -75px; --spark-r: -50deg; }
+.spark-two { --spark-x: 70px; --spark-y: -35px; --spark-r: 60deg; }
+.spark-three { --spark-x: 35px; --spark-y: 70px; --spark-r: 150deg; }
+.combat-effect-banner { position: absolute; bottom: clamp(24px, 7vh, 80px); left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 19px; width: max-content; min-width: 290px; max-width: min(570px, calc(100vw - 32px)); padding: 20px 27px; border: 1px solid #c48b53; border-left: 4px solid #edbd7f; background: #191310f5; color: #f7e5d0; box-shadow: 0 12px 50px #0007, inset 0 0 25px #c7671910; animation: effect-banner 1.8s ease both; }
+.combat-effect-number { font: 400 clamp(2.2rem, 5vw, 3.7rem)/1 Cinzel, Georgia, serif; color: #f4bb78; min-width: 64px; text-align: center; }
+.combat-effect-label { font: 600 .68rem/1.5 Barlow, sans-serif; letter-spacing: .19em; text-transform: uppercase; color: #f1bc83; margin-bottom: 5px; }
+.combat-effect-target { font: 500 .96rem/1.5 Barlow, sans-serif; overflow-wrap: anywhere; }
+.combat-effect-target > span { color: #cf9c70; padding: 0 4px; }
+.combat-effect-detail { font-size: .82rem; color: #cebcaa; margin-top: 4px; }
+.effect-sr { position: absolute; width: 1px; height: 1px; padding: 0 !important; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.combat-effect-layer[data-effect='miss'] .combat-effect-strike { color: #9cb7c1; }
+.combat-effect-layer[data-effect='miss'] .effect-arc { fill: #8aabb326; stroke: #a8c3c9; animation-name: effect-miss; }
+.combat-effect-layer[data-effect='miss'] .effect-arc-shadow { fill: #59869426; animation-name: effect-miss; }
+.combat-effect-layer[data-effect='miss'] .effect-trail { stroke: #b8d4d8; stroke-dasharray: 18 14; stroke-width: 1.5; }
+.combat-effect-layer[data-effect='miss'] .combat-effect-ripple, .combat-effect-layer[data-effect='miss'] .combat-effect-spark { display: none; }
+.combat-effect-layer[data-effect='miss'] .combat-effect-banner { border-color: #7e9ca9; border-left-color: #b3cdd1; box-shadow: 0 12px 50px #0007; }
+.combat-effect-layer[data-effect='miss'] .combat-effect-number, .combat-effect-layer[data-effect='miss'] .combat-effect-label { color: #bdd6dc; }
+.combat-effect-layer.is-static .combat-effect-strike { display: none; }
+.combat-effect-layer.is-static .combat-effect-banner { animation: none; }
+@keyframes effect-slash { 0% { opacity: 0; transform: scale(.45) rotate(-25deg); } 20% { opacity: .85; } 70% { opacity: .5; } 100% { opacity: 0; transform: scale(1.1) rotate(8deg); } }
+@keyframes effect-trail { 0% { opacity: 0; stroke-dashoffset: 650; } 20% { opacity: .85; } 65% { stroke-dashoffset: 0; } 100% { opacity: 0; stroke-dashoffset: -100; } }
+@keyframes effect-ripple { from { opacity: .6; transform: translate(-50%,-50%) scale(.3); } to { opacity: 0; transform: translate(-50%,-50%) scale(2); } }
+@keyframes effect-spark { from { opacity: .8; transform: translate(0,0) rotate(var(--spark-r)); } to { opacity: 0; transform: translate(var(--spark-x),var(--spark-y)) rotate(var(--spark-r)) scale(.5); } }
+@keyframes effect-miss { 0% { opacity: 0; transform: translate(-80px,50px) rotate(-18deg); } 30% { opacity: .5; } 100% { opacity: 0; transform: translate(90px,-60px) rotate(15deg); } }
+@keyframes effect-banner { 0% { opacity: 0; transform: translate(-50%,16px); } 14%, 80% { opacity: 1; transform: translate(-50%,0); } 100% { opacity: 0; transform: translate(-50%,-7px); } }
+@media (max-width: 500px) {
+  .combat-effect-banner { bottom: 22px; padding: 16px 19px; gap: 13px; min-width: 0; width: calc(100vw - 30px); }
+  .combat-effect-number { font-size: 2.5rem; min-width: 55px; }
+  .combat-effect-target { font-size: .88rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .combat-effect-layer .combat-effect-strike { display: none; }
+  .combat-effect-layer .combat-effect-banner { animation: none; }
+}
+.motion-paused .combat-effect-layer .combat-effect-strike { display: none; }
+.motion-paused .combat-effect-layer .combat-effect-banner { animation: none; }
