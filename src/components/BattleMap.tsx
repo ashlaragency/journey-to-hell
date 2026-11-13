@@ -2,14 +2,23 @@
 // Reglas de movimiento: cada casilla son 5 pies; en un turno se pueden
 // mover hasta 6 casillas (30 pies). La distancia se mide con la regla de
 // Chebyshev: la diagonal cuenta como una sola casilla.
-import { useEffect, useState } from 'react';
+import { playSound } from '../lib/audio';
+import { useState, type CSSProperties } from 'react';
+import './BattleMap.css';
 import MonsterPortrait from './MonsterPortrait';
+import CharacterPortrait from './CharacterPortrait';
+import { readAppearance } from '../lib/appearance';
+import { clearDeathSaves } from '../lib/deathSaves.ts';
 import {
   supabase,
   type CharacterRow,
   type MapToken,
 } from '../lib/supabase';
 import { LUGARES, todosLosMapas, urlMapa } from '../lib/atlas';
+import CombatBoard from './CombatBoard';
+import { useActiveCombat, saveCombatMove } from '../hooks/useActiveCombat';
+import { useCombatActions } from '../hooks/useCombatActions';
+import { COMBAT_COLS, COMBAT_ROWS, moveCombatant } from '../lib/boardCombat';
 
 type Background = 'pergamino' | 'mazmorra' | 'bosque' | 'taberna' | 'nieve';
 
@@ -39,21 +48,20 @@ const ENEMY_PRESETS: EnemyPreset[] = [
   { name: 'Ogro', hp: 59, color: '#a1887f' },
 ];
 
-const CLASS_ICONS: Record<string, string> = {
-  guerrero: '⚔️',
-  mago: '🧙',
-  pícaro: '🗡️',
-  clérigo: '⛪',
-  bardo: '🎵',
-  druida: '🌿',
-  paladín: '🛡️',
-  explorador: '🏹',
-  hechicero: '✨',
-  brujo: '🔮',
-  bárbaro: '🪓',
-  monje: '🥋',
-  artífice: '⚙️',
-};
+function MapIcon({ kind }: { kind: 'settings' | 'save' | 'clear' | 'measure' | 'person' | 'enemy' | 'pieces' | 'close' | 'move' }) {
+  const paths = {
+    settings: 'M4 6h16M4 12h16M4 18h16M8 3v6M16 9v6M10 15v6',
+    save: 'M4 3h13l4 4v14H3V3h1Zm3 0v6h10V3M7 21v-8h10v8',
+    clear: 'M4 7h16M9 7V3h6v4M6 7l1 14h10l1-14M10 11v6m4-6v6',
+    measure: 'm3 16 13-13 5 5L8 21l-5-5Zm10-10 3 3m-6 0 2 2m-5 1 3 3m-6 0 2 2',
+    person: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8m10-3v6m-3-3h6',
+    enemy: 'm4 3 5 4h6l5-4-2 10-6 8-6-8L4 3Zm4 8h1m6 0h1m-7 5h6',
+    pieces: 'M9 3h6l-1 5 3 6v4H7v-4l3-6-1-5ZM5 21h14M7 18h10M10 8h4',
+    close: 'm6 6 12 12M6 18 18 6',
+    move: 'M12 3v18M3 12h18M9 6l3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3m12-6 3 3-3 3',
+  };
+  return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={paths[kind]} /></svg>;
+}
 
 const PC_COLORS = ['#7b1fa2', '#1565c0', '#c62828', '#2e7d32', '#ef6c00', '#00838f'];
 
@@ -73,35 +81,50 @@ interface BattleMapProps {
   worldId: string | null;
   characters: CharacterRow[];
   schemaOk: boolean;
+  playerName: string;
+  onCharactersChange: () => void;
   /** Mapa del atlas abierto desde la pestaña Atlas (o null para cuadrícula de colores). */
   mapaInicial?: { slug: string; nombre: string } | null;
 }
 
-export default function BattleMap({ worldId, characters, schemaOk, mapaInicial }: BattleMapProps) {
+export default function BattleMap({ worldId, characters, schemaOk, playerName, onCharactersChange, mapaInicial }: BattleMapProps) {
+  const [combat, setCombat] = useActiveCombat(worldId, schemaOk);
+  const [moving, setMoving] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const actions = useCombatActions({
+    combat, setCombat, worldId, schemaOk, playerName, characters,
+    onCharactersChange, setResult: setNotice,
+  });
+  async function moveInCombat(refId: string, x: number, y: number) {
+    if (!combat || moving) return;
+    const next = moveCombatant(combat, refId, x, y, COMBAT_COLS, COMBAT_ROWS);
+    if (!next) return;
+    setMoving(true);
+    const saved = await saveCombatMove(combat, next);
+    setMoving(false);
+    if (saved) { setCombat(saved); playSound('move'); }
+    else setNotice('La mesa cambió mientras movías la ficha. Vuelve a intentarlo.');
+  }
   const [gridSize, setGridSize] = useState<number>(12);
   const [background, setBackground] = useState<Background>('pergamino');
   const [atlasMap, setAtlasMap] = useState<string | null>(mapaInicial?.slug ?? null);
-  const [mapName, setMapName] = useState('Mapa 1');
+  const [mapName, setMapName] = useState(mapaInicial?.nombre ?? 'Mapa 1');
   const [tokens, setTokens] = useState<MapToken[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showAddCharacter, setShowAddCharacter] = useState(false);
   const [showAddEnemy, setShowAddEnemy] = useState(false);
   const [measuring, setMeasuring] = useState(false);
   const [measurePoints, setMeasurePoints] = useState<{ x: number; y: number }[]>([]);
-  const [notice, setNotice] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-
-  // Cuando el Atlas abre un mapa aquí, se pone como fondo de la cuadrícula.
-  useEffect(() => {
-    if (mapaInicial) {
-      setAtlasMap(mapaInicial.slug);
-      setMapName((prev) => (prev === 'Mapa 1' || prev.trim() === '' ? mapaInicial.nombre : prev));
-    }
-  }, [mapaInicial]);
 
   const bg = BACKGROUNDS.find((b) => b.value === background) ?? BACKGROUNDS[0];
   const livingCharacters = characters.filter((c) => c.status === 'vivo');
   const selectedToken = tokens.find((t) => t.id === selectedId) ?? null;
+
+  function characterForToken(token: MapToken | null) {
+    if (!token?.id.startsWith('pc-')) return undefined;
+    return characters.find((character) => character.id === token.id.slice(3));
+  }
 
   function tokenAt(x: number, y: number): MapToken | undefined {
     return tokens.find((t) => t.x === x && t.y === y);
@@ -119,22 +142,24 @@ export default function BattleMap({ worldId, characters, schemaOk, mapaInicial }
   function addToken(token: MapToken) {
     const cell = firstFreeCell();
     if (!cell) {
-      setNotice('⚠️ El mapa está lleno: no queda ninguna casilla libre.');
+      setNotice('El mapa está lleno: no queda ninguna casilla libre.');
+      playSound('failure');
       return;
     }
     setTokens((prev) => [...prev, { ...token, x: cell.x, y: cell.y }]);
     setSelectedId(token.id);
     setNotice(null);
+    playSound('select');
   }
 
   function addCharacter(character: CharacterRow) {
     const id = `pc-${character.id}`;
     if (tokens.some((t) => t.id === id)) {
-      setNotice(`⚠️ ${character.name} ya está en el mapa.`);
+      setNotice(`${character.name} ya está en el mapa.`);
+      playSound('failure');
       return;
     }
-    const icon =
-      CLASS_ICONS[character.class_name.trim().toLowerCase()] ?? '🧑';
+    const icon = character.name.charAt(0).toUpperCase();
     const color =
       PC_COLORS[tokens.filter((t) => t.id.startsWith('pc-')).length % PC_COLORS.length];
     addToken({
@@ -177,6 +202,7 @@ export default function BattleMap({ worldId, characters, schemaOk, mapaInicial }
     if (token) {
       setSelectedId(token.id);
       setNotice(null);
+      playSound('select');
       return;
     }
 
@@ -189,9 +215,10 @@ export default function BattleMap({ worldId, characters, schemaOk, mapaInicial }
       setTokens((prev) =>
         prev.map((t) => (t.id === selectedToken.id ? { ...t, x, y } : t)),
       );
+      playSound('move');
       if (distance > 6) {
         setNotice(
-          `⚠️ Eso es más de lo que puede moverse en un turno (30 pies): moviste ${distance} casillas (${distance * 5} pies).`,
+          `Eso es más de lo que puede moverse en un turno (30 pies): moviste ${distance} casillas (${distance * 5} pies).`,
         );
       } else {
         setNotice(
@@ -203,24 +230,31 @@ export default function BattleMap({ worldId, characters, schemaOk, mapaInicial }
 
   async function changeHp(delta: number) {
     if (!selectedToken) return;
+    const tokenId = selectedToken.id;
     const newHp = Math.max(0, Math.min(selectedToken.max_hp, selectedToken.hp + delta));
     if (newHp === selectedToken.hp) return;
-
-    setTokens((prev) =>
-      prev.map((t) => (t.id === selectedToken.id ? { ...t, hp: newHp } : t)),
-    );
-
-    // Si es un personaje jugador, su vida también cambia en la tabla characters.
-    if (selectedToken.id.startsWith('pc-')) {
-      const characterId = selectedToken.id.slice(3);
-      const { error } = await supabase
-        .from('characters')
-        .update({ hp: newHp })
-        .eq('id', characterId);
-      if (error) {
-        setNotice(`⚠️ La vida cambió en el mapa, pero no se pudo guardar en el personaje: ${error.message}`);
+    if (tokenId.startsWith('pc-')) {
+      const characterId = tokenId.slice(3);
+      const character = characters.find((item) => item.id === characterId);
+      if (!character || character.status !== 'vivo') {
+        setNotice('Esta hoja está sellada. Su vida ya no se puede cambiar.');
+        return;
+      }
+      if (!schemaOk || !worldId) {
+        setNotice('Recupera la conexión antes de cambiar la vida de un personaje.');
+        return;
+      }
+      let query = supabase.from('characters').update(newHp > 0 ? { hp: newHp, notes: clearDeathSaves(character.notes) } : { hp: newHp })
+        .eq('id', characterId).eq('world_id', worldId).eq('status', 'vivo')
+        .eq('hp', character.hp);
+      if (newHp > 0) query = character.notes === null ? query.is('notes', null) : query.eq('notes', character.notes);
+      const { data, error } = await query.select('id').maybeSingle();
+      if (error || !data) {
+        setNotice('No se pudo guardar la vida. Revisa la hoja actualizada antes de intentarlo de nuevo.');
+        return;
       }
     }
+    setTokens((previous) => previous.map((token) => token.id === tokenId ? { ...token, hp: newHp } : token));
   }
 
   function removeSelectedToken() {
@@ -238,7 +272,8 @@ export default function BattleMap({ worldId, characters, schemaOk, mapaInicial }
 
   async function saveMap() {
     if (!schemaOk) {
-      setNotice('⚠️ No se puede guardar: las tablas de Supabase aún no están listas (falta aplicar el SQL).');
+      setNotice('No se puede guardar ahora. Revisa la conexión con el mundo y vuelve a intentarlo.');
+      playSound('failure');
       return;
     }
     setSaving(true);
@@ -251,9 +286,11 @@ export default function BattleMap({ worldId, characters, schemaOk, mapaInicial }
     });
     setSaving(false);
     if (error) {
-      setNotice(`⚠️ No se pudo guardar el mapa: ${error.message}`);
+      setNotice(`No se pudo guardar el mapa: ${error.message}`);
+      playSound('failure');
     } else {
-      setNotice(`✅ Mapa "${mapName.trim() || 'Mapa 1'}" guardado con ${tokens.length} ficha${tokens.length === 1 ? '' : 's'}.`);
+      playSound('success');
+      setNotice(`Mapa "${mapName.trim() || 'Mapa 1'}" guardado con ${tokens.length} ficha${tokens.length === 1 ? '' : 's'}.`);
     }
   }
 
@@ -268,346 +305,175 @@ export default function BattleMap({ worldId, characters, schemaOk, mapaInicial }
       : null;
 
   return (
-    <div className="card battle-map">
-      <h2>Mapa de batalla</h2>
-      <p>
-        Cada casilla son 5 pies. En un turno puedes moverte hasta 6 casillas
-        (30 pies). Toca una ficha para seleccionarla y luego toca una casilla
-        para moverla.
-      </p>
+    <div className="battle-map enchanted-battle">
+      <header className="battle-heading">
+        <div><p className="battle-eyebrow">Despliega la aventura</p><h2>Mesa de batalla</h2></div>
+        <span className="battle-piece-count"><MapIcon kind="pieces" />{tokens.length} fichas en juego</span>
+      </header>
 
-      {atlasMap && (
-        <p className="hint">
-          🖼️ Fondo: imagen del atlas (16:9). La cuadrícula va encima y las
-          fichas se mueven igual. Sin imagen, el mapa usa la cuadrícula de
-          colores.
-        </p>
-      )}
+      {combat && <>
+        <div className="battle-live-combat" role="status">
+          <p><strong>Hay un combate en curso.</strong><small>Ronda {combat.round} · Actúa {combat.combatants[combat.turn_index % combat.combatants.length]?.name ?? 'la compañía'}. Los golpes y los movimientos se ven aquí en directo.</small></p>
+        </div>
+        <CombatBoard combat={combat} characters={characters} art={atlasMap ? urlMapa(atlasMap) : undefined} busy={moving || actions.pending}
+          onMove={(refId, x, y) => void moveInCombat(refId, x, y)}
+          onAttack={(attackerRefId, targetRefId) => void actions.runAction(() => actions.pcAttack(targetRefId, attackerRefId))}
+          onEnemyAttack={(enemyRefId) => void actions.runAction(() => actions.enemyAttack(enemyRefId))}
+          onPassTurn={() => void actions.runAction(actions.nextTurn)} />
+      </>}
 
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center' }}>
-        <label>
-          Tamaño:{' '}
-          <select
-            value={gridSize}
-            onChange={(e) => {
-              const size = Number(e.target.value);
-              setGridSize(size);
-              // Quita las fichas que queden fuera del mapa más pequeño.
-              setTokens((prev) => prev.filter((t) => t.x < size && t.y < size));
-              setMeasurePoints([]);
-            }}
-          >
-            {GRID_SIZES.map((size) => (
-              <option key={size} value={size}>
-                {size} × {size}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label>
-          Fondo:{' '}
-          <select
-            value={background}
-            onChange={(e) => setBackground(e.target.value as Background)}
-          >
-            {BACKGROUNDS.map((b) => (
-              <option key={b.value} value={b.value}>
-                {b.label}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label>
-          Mapa del atlas:{' '}
-          <select
-            value={atlasMap ?? ''}
-            onChange={(e) => {
-              const slug = e.target.value || null;
-              setAtlasMap(slug);
-              if (slug) {
-                const m = todosLosMapas().find((mm) => mm.slug === slug);
-                if (m) {
-                  setMapName((prev) => (prev === 'Mapa 1' || prev.trim() === '' ? m.nombre : prev));
+      <div className="battle-tools">
+        <details className="battle-setup">
+          <summary><MapIcon kind="settings" />Preparar tablero<span aria-hidden="true">⌄</span></summary>
+          <div className="battle-setup-fields">
+            <label>Tamaño de la cuadrícula
+              <select aria-label="Tamaño de la cuadrícula" value={gridSize} onChange={(event) => {
+                const size = Number(event.target.value);
+                setGridSize(size);
+                setTokens((previous) => previous.filter((token) => token.x < size && token.y < size));
+                setMeasurePoints([]);
+              }}>
+                {GRID_SIZES.map((size) => <option key={size} value={size}>{size} × {size}</option>)}
+              </select>
+            </label>
+            <label>Material del tablero
+              <select aria-label="Material del tablero" value={background} onChange={(event) => setBackground(event.target.value as Background)}>
+                {BACKGROUNDS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+              </select>
+            </label>
+            <label className="battle-map-picker">Mapa del Atlas
+              <select aria-label="Mapa del Atlas" value={atlasMap ?? ''} onChange={(event) => {
+                const slug = event.target.value || null;
+                setAtlasMap(slug);
+                if (slug) {
+                  const map = todosLosMapas().find((item) => item.slug === slug);
+                  if (map) setMapName((previous) => previous === 'Mapa 1' || previous.trim() === '' ? map.nombre : previous);
                 }
-              }
-            }}
-          >
-            <option value="">Cuadrícula de colores (sin imagen)</option>
-            {LUGARES.filter((l) => l.mapas.length > 0).map((l) => (
-              <optgroup key={l.id} label={`${l.nombre} · ${l.zona}`}>
-                {l.mapas.map((m) => (
-                  <option key={m.slug} value={m.slug}>
-                    {m.nombre}
-                  </option>
-                ))}
-              </optgroup>
-            ))}
-          </select>
-        </label>
-
-        <label>
-          Nombre:{' '}
-          <input
-            type="text"
-            value={mapName}
-            onChange={(e) => setMapName(e.target.value)}
-            placeholder="Mapa 1"
-            style={{ maxWidth: '10rem' }}
-          />
-        </label>
-
-        <button
-          type="button"
-          className="btn btn-primary"
-          onClick={saveMap}
-          disabled={saving}
-        >
-          {saving ? 'Guardando…' : '💾 Guardar mapa'}
-        </button>
-        <button type="button" className="btn" onClick={clearMap}>
-          🧹 Limpiar mapa
-        </button>
-      </div>
-
-      {!schemaOk && (
-        <p>
-          ⚠️ Las tablas de Supabase aún no están listas: puedes mover fichas en
-          el mapa, pero no se podrá guardar.
-        </p>
-      )}
-
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.75rem' }}>
-        <button
-          type="button"
-          className="btn"
-          aria-expanded={showAddCharacter}
-          onClick={() => {
-            setShowAddCharacter((v) => !v);
+              }}>
+                <option value="">Tablero sin ilustración</option>
+                {LUGARES.filter((place) => place.mapas.length > 0).map((place) => <optgroup key={place.id} label={`${place.nombre} · ${place.zona}`}>
+                  {place.mapas.map((map) => <option key={map.slug} value={map.slug}>{map.nombre}</option>)}
+                </optgroup>)}
+              </select>
+            </label>
+            <label>Nombre del mapa
+              <input aria-label="Nombre del mapa" type="text" value={mapName} onChange={(event) => setMapName(event.target.value)} placeholder="Mapa 1" />
+            </label>
+            <button type="button" className="btn battle-clear" onClick={clearMap}><MapIcon kind="clear" />Limpiar mapa</button>
+          </div>
+        </details>
+        <div className="battle-primary-tools">
+          <button type="button" className="btn" aria-expanded={showAddCharacter} aria-controls={showAddCharacter ? 'battle-character-choices' : undefined} onClick={() => {
+            setShowAddCharacter((value) => !value);
             setShowAddEnemy(false);
-          }}
-        >
-          ➕ Añadir personaje vivo
-        </button>
-        <button
-          type="button"
-          className="btn"
-          aria-expanded={showAddEnemy}
-          onClick={() => {
-            setShowAddEnemy((v) => !v);
+          }}><MapIcon kind="person" />Añadir personaje vivo</button>
+          <button type="button" className="btn" aria-expanded={showAddEnemy} aria-controls={showAddEnemy ? 'battle-enemy-choices' : undefined} onClick={() => {
+            setShowAddEnemy((value) => !value);
             setShowAddCharacter(false);
-          }}
-        >
-          Añadir enemigo
-        </button>
-        <button
-          type="button"
-          className={measuring ? 'btn chip-selected' : 'btn'}
-          aria-pressed={measuring}
-          onClick={() => {
-            setMeasuring((v) => !v);
+          }}><MapIcon kind="enemy" />Añadir enemigo</button>
+          <button type="button" className={`btn ${measuring ? 'chip-selected' : ''}`} aria-pressed={measuring} onClick={() => {
+            setMeasuring((value) => !value);
             setMeasurePoints([]);
             setNotice(null);
-          }}
-        >
-          📏 Medir
-        </button>
+          }}><MapIcon kind="measure" />Medir</button>
+          <button type="button" className="btn btn-primary battle-save" onClick={saveMap} disabled={saving}><MapIcon kind="save" />{saving ? 'Guardando…' : 'Guardar mapa'}</button>
+        </div>
       </div>
 
-      {showAddCharacter && (
-        <div style={{ marginTop: '0.75rem' }}>
-          <p>Toca un personaje para añadirlo al mapa:</p>
-          {livingCharacters.length === 0 ? (
-            <p>No hay personajes vivos todavía.</p>
-          ) : (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-              {livingCharacters.map((c) => (
-                <button
-                  key={c.id}
-                  type="button"
-                  className="chip"
-                  onClick={() => addCharacter(c)}
-                >
-                  {CLASS_ICONS[c.class_name.trim().toLowerCase()] ?? '🧑'} {c.name}{' '}
-                  ({c.hp}/{c.max_hp} PV)
-                </button>
-              ))}
+      {!schemaOk && <p className="battle-notice" role="status">No hay conexión con el mundo. Puedes preparar el tablero, pero todavía no se podrá guardar.</p>}
+
+      {showAddCharacter && <section id="battle-character-choices" className="battle-piece-picker" aria-label="Personajes para el tablero">
+        <p className="battle-eyebrow">Elige quién entra en la mesa</p>
+        {livingCharacters.length === 0 ? <p>No hay personajes vivos todavía.</p> : <div className="battle-character-choices">
+          {livingCharacters.map((character) => <button key={character.id} type="button" className="battle-character-choice" onClick={() => addCharacter(character)}>
+            <CharacterPortrait species={character.species} profession={character.class_name} appearance={readAppearance(character.notes)} name={character.name} compact decorative className="battle-avatar" />
+            <span><strong>{character.name}</strong><small>{character.class_name} · {character.hp}/{character.max_hp} vida</small></span>
+            <span className="battle-add-mark" aria-hidden="true">+</span>
+          </button>)}
+        </div>}
+      </section>}
+
+      {showAddEnemy && <section id="battle-enemy-choices" className="battle-piece-picker" aria-label="Enemigos para el tablero">
+        <p className="battle-eyebrow">Una nueva presencia en el tablero</p>
+        <div className="enemy-choices">
+          {ENEMY_PRESETS.map((preset) => <button key={preset.name} type="button" className="enemy-choice" onClick={() => addEnemy(preset)}>
+            <MonsterPortrait name={preset.name} />
+            <span><strong>{preset.name}</strong><small>{preset.hp} vida</small></span>
+          </button>)}
+        </div>
+      </section>}
+
+      {measuring && <p className="battle-notice battle-measure-notice" role="status"><MapIcon kind="measure" />{measureText ? `${measureText}.` : 'Toca dos casillas para medir la distancia.'} Cada casilla son 5 pies, también en diagonal.</p>}
+      {notice && <p className="battle-notice" role="status">{notice}</p>}
+
+      <div className="battle-table-layout">
+        <section className="battle-board" aria-label="Tablero de juego">
+          <div className="battle-board-plaque"><span>{atlasMap ? todosLosMapas().find((map) => map.slug === atlasMap)?.nombre ?? mapName : mapName}</span><small>{gridSize} × {gridSize} casillas</small></div>
+          <div className="battle-table-frame">
+            <span className="battle-table-stud stud-nw" aria-hidden="true" /><span className="battle-table-stud stud-ne" aria-hidden="true" />
+            <span className="battle-table-stud stud-sw" aria-hidden="true" /><span className="battle-table-stud stud-se" aria-hidden="true" />
+            <div className="battle-table-scroll" tabIndex={0} role="region" aria-label="Tablero desplazable. Usa las flechas para recorrerlo.">
+              <div className={`battle-grid ${atlasMap ? 'battle-grid-illustrated' : ''}`} style={{
+                '--grid-count': gridSize,
+                '--grid-background': bg.gridBg,
+                '--cell-background': bg.cellBg,
+                backgroundImage: atlasMap ? `url("${urlMapa(atlasMap)}")` : undefined,
+              } as CSSProperties} role="group" aria-label={`Mapa de batalla de ${gridSize} por ${gridSize} casillas`}>
+                {Array.from({ length: gridSize * gridSize }, (_, index) => {
+                  const x = index % gridSize;
+                  const y = Math.floor(index / gridSize);
+                  const token = tokenAt(x, y);
+                  const isSelected = token?.id === selectedId;
+                  const isMeasurePoint = measurePoints.some((point) => point.x === x && point.y === y);
+                  return <button key={`${x}-${y}`} type="button" className={`battle-cell ${token ? 'battle-cell-occupied' : ''} ${isSelected ? 'battle-cell-selected' : ''} ${isMeasurePoint ? 'battle-cell-measured' : ''}`}
+                    onClick={() => handleCellClick(x, y)} aria-pressed={isSelected || isMeasurePoint}
+                    title={token ? `${token.name} · ${token.hp}/${token.max_hp} vida` : undefined}
+                    aria-label={token ? `Casilla ${x + 1}, ${y + 1}: ${token.name}, ${token.hp} de ${token.max_hp} de vida` : `Casilla ${x + 1}, ${y + 1}: vacía`}>
+                    {token && <span className={`battle-miniature ${token.id.startsWith('enemy-') ? 'battle-miniature-enemy' : 'battle-miniature-hero'} ${token.hp <= 0 ? 'battle-miniature-down' : ''}`} style={{ '--piece-accent': token.color } as CSSProperties}>
+                      {token.id.startsWith('enemy-') ? <MonsterPortrait name={token.name} className="battle-miniature-portrait" /> : (() => {
+                        const character = characterForToken(token);
+                        return character
+                          ? <CharacterPortrait species={character.species} profession={character.class_name} appearance={readAppearance(character.notes)} name={character.name} compact decorative className="battle-miniature-portrait" />
+                          : <span className="battle-miniature-initial" aria-hidden="true">{token.name.charAt(0)}</span>;
+                      })()}
+                      <span className="battle-miniature-health" aria-hidden="true">{token.hp}</span>
+                    </span>}
+                    {isMeasurePoint && !token && <span className="battle-measure-pin" aria-hidden="true">{measurePoints.findIndex((point) => point.x === x && point.y === y) + 1}</span>}
+                  </button>;
+                })}
+              </div>
             </div>
-          )}
-        </div>
-      )}
-
-      {showAddEnemy && (
-        <div style={{ marginTop: '0.75rem' }}>
-          <p>Toca un enemigo para añadirlo al mapa:</p>
-          <div className="enemy-choices">
-            {ENEMY_PRESETS.map((preset) => (
-              <button
-                key={preset.name}
-                type="button"
-                className="enemy-choice"
-                onClick={() => addEnemy(preset)}
-              >
-                <MonsterPortrait name={preset.name} />
-                <span><strong>{preset.name}</strong><small>{preset.hp} PV</small></span>
-              </button>
-            ))}
           </div>
-        </div>
-      )}
+          <div className="battle-board-caption"><span><MapIcon kind="move" />Toca una ficha y después su destino.</span><span>1 casilla = 5 pies · Hasta 6 por turno</span></div>
+        </section>
 
-      {measuring && (
-        <p>
-          📏 Modo medir: toca dos casillas. La distancia se mide con la regla
-          de Chebyshev: moverse en diagonal cuenta como una sola casilla
-          (igual que en horizontal o vertical), y cada casilla son 5 pies.
-          {measureText ? ` ${measureText}.` : ' Toca la primera casilla.'}
-        </p>
-      )}
-
-      {notice && <p role="status">{notice}</p>}
-
-      {selectedToken && (
-        <div className="card" style={{ marginTop: '0.75rem' }}>
-          <div className="selected-token-heading">
-            {selectedToken.id.startsWith('enemy-') && <MonsterPortrait name={selectedToken.name} />}
-            <strong>{selectedToken.id.startsWith('pc-') && selectedToken.icon} {selectedToken.name}</strong>
-          </div>
-          <div
-            style={{
-              height: '10px',
-              borderRadius: '5px',
-              background: '#ddd',
-              overflow: 'hidden',
-              margin: '0.5rem 0',
-            }}
-          >
-            <div
-              style={{
-                height: '100%',
-                width: `${selectedToken.max_hp > 0 ? (selectedToken.hp / selectedToken.max_hp) * 100 : 0}%`,
-                background: selectedToken.hp === 0 ? '#c62828' : '#2e7d32',
-              }}
-            />
-          </div>
-          <p>
-            Vida: {selectedToken.hp} / {selectedToken.max_hp} PV
-            {selectedToken.hp === 0 ? ' · ¡Caído!' : ''}
-            {selectedToken.id.startsWith('pc-') &&
-              ' · los cambios también se guardan en su personaje.'}
-          </p>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-            <button type="button" className="btn" onClick={() => changeHp(-5)}>
-              −5
-            </button>
-            <button type="button" className="btn" onClick={() => changeHp(-1)}>
-              −1
-            </button>
-            <button type="button" className="btn" onClick={() => changeHp(1)}>
-              +1
-            </button>
-            <button type="button" className="btn" onClick={() => changeHp(5)}>
-              +5
-            </button>
-            <button type="button" className="btn" onClick={removeSelectedToken}>
-              🗑️ Quitar ficha
-            </button>
-            <button type="button" className="btn" onClick={() => setSelectedId(null)}>
-              ✖️ Deseleccionar
-            </button>
-          </div>
-        </div>
-      )}
-
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: `repeat(${gridSize}, 1fr)`,
-          gap: '2px',
-          background: atlasMap ? '#17100a' : bg.gridBg,
-          backgroundImage: atlasMap ? `url(${urlMapa(atlasMap)})` : undefined,
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-          padding: '4px',
-          borderRadius: '8px',
-          width: '100%',
-          maxWidth: '640px',
-          marginTop: '1rem',
-        }}
-        role="group"
-        aria-label={`Mapa de batalla de ${gridSize} por ${gridSize} casillas`}
-      >
-        {Array.from({ length: gridSize * gridSize }, (_, i) => {
-          const x = i % gridSize;
-          const y = Math.floor(i / gridSize);
-          const token = tokenAt(x, y);
-          const isSelected = token?.id === selectedId;
-          const isMeasurePoint = measurePoints.some((p) => p.x === x && p.y === y);
-          return (
-            <button
-              key={`${x}-${y}`}
-              type="button"
-              className={token?.id.startsWith('enemy-') ? 'map-enemy-cell' : undefined}
-              onClick={() => handleCellClick(x, y)}
-              aria-pressed={isSelected || isMeasurePoint}
-              title={token ? `${token.name} · ${token.hp}/${token.max_hp} PV` : undefined}
-              aria-label={
-                token
-                  ? `Casilla ${x + 1}, ${y + 1}: ${token.name}, ${token.hp} de ${token.max_hp} de vida`
-                  : `Casilla ${x + 1}, ${y + 1}: vacía`
-              }
-              style={{
-                aspectRatio: '1 / 1',
-                padding: 0,
-                border: isSelected
-                  ? '3px solid gold'
-                  : isMeasurePoint
-                    ? '3px solid #1565c0'
-                    : atlasMap
-                      ? '1px solid rgba(255,255,255,0.4)'
-                      : '1px solid rgba(0,0,0,0.15)',
-                borderRadius: '4px',
-                background: token ? token.color : atlasMap ? 'rgba(10, 8, 6, 0.28)' : bg.cellBg,
-                color: '#fff',
-                cursor: 'pointer',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: gridSize > 12 ? '0.65rem' : '0.8rem',
-                lineHeight: 1.1,
-                overflow: 'hidden',
-              }}
-            >
-              {token && (
-                <>
-                  {token.id.startsWith('enemy-') ? (
-                    <MonsterPortrait name={token.name} className="map-token-portrait" />
-                  ) : (
-                    <>
-                      <span style={{ fontSize: gridSize > 12 ? '1rem' : '1.25rem' }}>
-                        {token.icon}
-                      </span>
-                      <span style={{ fontWeight: 'bold', textShadow: '0 1px 2px rgba(0,0,0,0.6)' }}>
-                        {shortName(token.name)}
-                      </span>
-                    </>
-                  )}
-                  <span className={token.id.startsWith('enemy-') ? 'map-token-hp' : undefined} style={{ textShadow: '0 1px 2px rgba(0,0,0,0.6)' }}>
-                    {token.hp}/{token.max_hp}
-                  </span>
-                </>
-              )}
-            </button>
-          );
-        })}
+        <aside className="battle-selection" aria-label="Ficha seleccionada">
+          {selectedToken ? <>
+            <p className="battle-eyebrow">Tu siguiente movimiento</p>
+            <div className="selected-token-heading">
+              {selectedToken.id.startsWith('enemy-') ? <MonsterPortrait name={selectedToken.name} /> : (() => {
+                const character = characterForToken(selectedToken);
+                return character
+                  ? <CharacterPortrait species={character.species} profession={character.class_name} appearance={readAppearance(character.notes)} name={character.name} compact decorative className="battle-avatar battle-avatar-large" />
+                  : <span className="battle-avatar battle-avatar-large" aria-hidden="true">{selectedToken.name.charAt(0)}</span>;
+              })()}
+              <div><strong>{selectedToken.name}</strong><small>Casilla {selectedToken.x + 1}, {selectedToken.y + 1}</small></div>
+            </div>
+            <div className="battle-vitals"><span>Vida</span><b>{selectedToken.hp}<small> / {selectedToken.max_hp}</small></b></div>
+            <div className="battle-hp-meter" role="meter" aria-label={`Vida de ${selectedToken.name}`} aria-valuemin={0} aria-valuemax={selectedToken.max_hp} aria-valuenow={selectedToken.hp}><span style={{ width: `${selectedToken.max_hp > 0 ? Math.max(0, Math.min(100, selectedToken.hp / selectedToken.max_hp * 100)) : 0}%` }} /></div>
+            {selectedToken.hp === 0 && <p className="battle-at-zero">A 0 de vida.</p>}
+            <div className="battle-hp-controls" aria-label="Ajustar vida de la ficha">
+              {[-5, -1, 1, 5].map((delta) => <button key={delta} type="button" className="btn" aria-label={`${delta < 0 ? 'Quitar' : 'Sumar'} ${Math.abs(delta)} de vida a ${selectedToken.name}`} onClick={() => changeHp(delta)}>{delta > 0 ? '+' : '−'}{Math.abs(delta)}</button>)}
+            </div>
+            {selectedToken.id.startsWith('pc-') && <p className="battle-selection-hint">La vida también se guarda en la hoja del personaje.</p>}
+            <p className="battle-move-hint"><MapIcon kind="move" />Elige una casilla libre para mover a {shortName(selectedToken.name)}.</p>
+            <div className="battle-selection-actions">
+              <button type="button" className="btn" onClick={() => setSelectedId(null)}><MapIcon kind="close" />Deseleccionar</button>
+              <button type="button" className="battle-remove" onClick={removeSelectedToken}><MapIcon kind="clear" />Quitar ficha del tablero</button>
+            </div>
+          </> : <div className="battle-empty-selection"><span className="battle-empty-seal" aria-hidden="true"><MapIcon kind="pieces" /></span><p className="battle-eyebrow">La mesa está preparada</p><h3>{tokens.length ? 'Elige tu próxima jugada' : 'Da vida al tablero'}</h3><p>{tokens.length ? 'Selecciona una ficha para moverla y consultar su vida.' : 'Añade a tu compañía y a sus enemigos con los controles de arriba.'}</p><span className="battle-empty-rule" aria-hidden="true">◇</span><small>{livingCharacters.length} personajes vivos en el mundo</small></div>}
+        </aside>
       </div>
-
-      <p>
-        Fichas en el mapa: {tokens.length} · Personajes vivos:{' '}
-        {livingCharacters.length}
-      </p>
     </div>
   );
 }
