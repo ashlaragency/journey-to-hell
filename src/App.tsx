@@ -1,5 +1,5 @@
 // Journey to Hell — app multijugador (Supabase Realtime, clave anon).
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import {
   supabase,
   checkSchema,
@@ -16,11 +16,16 @@ import type { MapaAtlas } from './lib/atlas';
 import GameIcon from './components/GameIcon';
 import WorldActivity from './components/WorldActivity';
 import CombatEffects from './components/CombatEffects';
+import CharacterPortrait from './components/CharacterPortrait';
+import { readAppearance } from './lib/appearance';
+import { clearDeathSaves } from './lib/deathSaves.ts';
 import { useSession } from './hooks/useSession';
 import { useTablePresence } from './hooks/useTablePresence';
+import { useCombatAbsenceGuard } from './hooks/useCombatAbsenceGuard';
 import './LivingShell.css';
 
 const CharacterCreator = lazy(() => import('./components/CharacterCreator'));
+const AppearanceEditor = lazy(() => import('./components/AppearanceEditor'));
 const BattleMap = lazy(() => import('./components/BattleMap'));
 const Atlas = lazy(() => import('./components/Atlas'));
 const Compendium = lazy(() => import('./components/Compendium'));
@@ -48,10 +53,19 @@ export default function App() {
   const [schemaOk, setSchemaOk] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showCreator, setShowCreator] = useState(false);
+  const [editingAppearance, setEditingAppearance] = useState<string | null>(null);
   const [hpFlash, setHpFlash] = useState<string | null>(null);
   const [mapaAtlas, setMapaAtlas] = useState<MapaAtlas | null>(null);
   const session = useSession(world?.id, schemaOk);
   const presence = useTablePresence(world?.id, schemaOk, playerName, role);
+  const presentNames = useMemo(() => presence.members.map((member) => member.name), [presence.members]);
+  const { overdueCharacterIds } = useCombatAbsenceGuard({
+    worldId: world?.id,
+    schemaOk,
+    characters,
+    presentNames,
+    presenceConnected: presence.connected,
+  });
   const sharedScene = session.cue?.payload.active ? { id: session.cue.id, ...session.cue.payload } : null;
   useEffect(() => {
     const onVisibility = () => setPageHidden(document.hidden);
@@ -92,8 +106,11 @@ export default function App() {
     const next = Math.max(0, Math.min(c.max_hp, c.hp + delta));
     if (!schemaOk) return;
     if (c.status !== 'vivo') return;
-    const { error } = await supabase.from('characters').update({ hp: next }).eq('id', c.id).eq('status', 'vivo').eq('hp', c.hp).select('id').single();
-    if (error) {
+    let query = supabase.from('characters').update(next > 0 ? { hp: next, notes: clearDeathSaves(c.notes) } : { hp: next })
+      .eq('id', c.id).eq('status', 'vivo').eq('hp', c.hp);
+    if (next > 0) query = c.notes === null ? query.is('notes', null) : query.eq('notes', c.notes);
+    const { data, error } = await query.select('id').maybeSingle();
+    if (error || !data) {
       setHpFlash('No se pudo guardar la vida. Actualiza la hoja e inténtalo de nuevo.');
       void fetchAll();
       return;
@@ -211,6 +228,7 @@ export default function App() {
               playerName={playerName}
               onCharactersChange={fetchAll}
               sharedScene={sharedScene}
+              overdueCharacterIds={overdueCharacterIds}
               onCreateCharacter={openCreator}
               onOpenMap={() => navigate('mapa')}
             />
@@ -222,7 +240,7 @@ export default function App() {
                 <ul className="party-list">
                   {living.slice(0, 4).map((character) => (
                     <li key={character.id}>
-                      <span className="character-avatar" aria-hidden="true">{character.name.slice(0, 1)}</span>
+                      <CharacterPortrait species={character.species} profession={character.class_name} appearance={readAppearance(character.notes)} name={character.name} compact decorative className="character-avatar party-character-portrait" />
                       <div><strong>{character.name}</strong><small>{character.class_name} · Nivel {character.level}</small>
                         <div className="hp-bar" role="meter" aria-label={`Vida de ${character.name}`} aria-valuenow={character.hp} aria-valuemin={0} aria-valuemax={character.max_hp}>
                           <div style={{ width: `${Math.max(0, Math.min(100, character.hp / character.max_hp * 100))}%` }} />
@@ -270,6 +288,7 @@ export default function App() {
             <div className="grid-cards">
               {characters.map((c) => (
                 <div key={c.id} className={`card char-card ${c.status === 'caido' ? 'fallen' : ''}`}>
+                  <CharacterPortrait species={c.species} profession={c.class_name} appearance={readAppearance(c.notes)} weapon={c.weapon} armor={c.armor} shield={c.shield} pack={c.pack} name={c.name} className="company-character-portrait" />
                   <h3>
                     {c.status === 'caido' ? '† ' : ''}
                     {c.name}
@@ -289,6 +308,8 @@ export default function App() {
                   <p className="hint">
                     {c.weapon ?? ''} {c.armor ? `· ${c.armor}` : ''} {c.shield ? '· con escudo' : ''}
                   </p>
+                  {c.status === 'vivo' && <button className="btn" onClick={() => setEditingAppearance((current) => current === c.id ? null : c.id)}>{editingAppearance === c.id ? 'Cerrar apariencia' : 'Cambiar peinado y color'}</button>}
+                  {editingAppearance === c.id && c.status === 'vivo' && <Suspense fallback={<p role="status">Cargando ajustes…</p>}><AppearanceEditor character={c} schemaOk={schemaOk} onSaved={() => { setEditingAppearance(null); void fetchAll(); }} onCancel={() => setEditingAppearance(null)} /></Suspense>}
                   {c.background && <p className="hint">Trasfondo: {c.background}</p>}
                   {c.personality && <p className="hint">Así es: {c.personality}</p>}
                   {c.motivation && <p className="hint">Busca: {c.motivation}</p>}
@@ -324,7 +345,7 @@ export default function App() {
         )}
 
         <Suspense fallback={<p role="status">Cargando sección…</p>}>
-          {tab === 'infernalista' && <Infernalista world={world} characters={characters} schemaOk={schemaOk} playerName={playerName} onOpenMap={() => navigate('mapa')} onOpenPlay={() => navigate('jugar')} />}
+          {tab === 'infernalista' && <Infernalista world={world} characters={characters} schemaOk={schemaOk} playerName={playerName} overdueCharacterIds={overdueCharacterIds} onOpenMap={() => navigate('mapa')} onOpenPlay={() => navigate('jugar')} />}
           {tab === 'mundo' && <WorldPanel world={world} schemaOk={schemaOk} playerName={playerName} />}
 
           {tab === 'mapa' && (
@@ -332,6 +353,8 @@ export default function App() {
               worldId={world?.id ?? null}
               characters={characters}
               schemaOk={schemaOk}
+              playerName={playerName}
+              onCharactersChange={fetchAll}
               mapaInicial={mapaAtlas}
             />
           )}

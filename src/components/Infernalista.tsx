@@ -1,10 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { supabase, type CharacterRow, type CombatRow, type World } from '../lib/supabase';
+import { supabase, type CharacterRow, type CombatRow, type Combatant, type World } from '../lib/supabase';
 import { SCENE_EVENT_TITLE, type SceneCuePayload } from '../lib/session';
 import { useSession } from '../hooks/useSession';
 import { playSound } from '../lib/audio';
 import { abilityMod, rollDie } from '../lib/data';
+import { nextTurn, rejoin, withdraw } from '../lib/rearguard';
+import { saveCombatMove } from '../hooks/useActiveCombat';
 import MonsterPortrait from './MonsterPortrait';
+import CharacterPortrait from './CharacterPortrait';
+import { readAppearance } from '../lib/appearance';
 import './Infernalista.css';
 
 interface InfernalistaProps {
@@ -12,6 +16,7 @@ interface InfernalistaProps {
   characters: CharacterRow[];
   schemaOk: boolean;
   playerName: string;
+  overdueCharacterIds: string[];
   onOpenMap: () => void;
   onOpenPlay: () => void;
 }
@@ -29,7 +34,7 @@ const TWISTS = [
   { title: 'El mundo responde', body: 'La noticia de las decisiones del grupo llegó antes que ellos. Alguien los espera con una deuda, una promesa o una advertencia.' },
 ];
 
-export default function Infernalista({ world, characters, schemaOk, playerName, onOpenMap, onOpenPlay }: InfernalistaProps) {
+export default function Infernalista({ world, characters, schemaOk, playerName, overdueCharacterIds, onOpenMap, onOpenPlay }: InfernalistaProps) {
   const { cue, loading: syncing, error: syncError, connected, refresh } = useSession(world?.id, schemaOk);
   const [adventures, setAdventures] = useState<Adventure[]>([]);
   const [loading, setLoading] = useState(true);
@@ -155,26 +160,48 @@ export default function Infernalista({ world, characters, schemaOk, playerName, 
       const { data: current, error: readError } = await supabase.from('combat').select('id').eq('world_id', worldId).eq('active', true).limit(1);
       if (readError) throw new Error('No se pudo comprobar si ya hay un combate. Inténtalo de nuevo.');
       if (current?.length) { await refreshCombat(); throw new Error('La mesa ya tiene un combate. Se ha actualizado el encuentro.'); }
-      const combatants = [
+      const combatants: Combatant[] = [
         ...living.filter((character) => character.hp > 0).map((character) => ({ kind: 'pc' as const, ref_id: character.id, name: character.name, initiative: rollDie(20) + abilityMod(character.dex), hp: character.hp, max_hp: character.max_hp, ac: character.ac })),
         ...adventure.enemies.map((enemy, index) => ({ kind: 'enemy' as const, ref_id: `enemy-${index}`, name: enemy.name, initiative: rollDie(20), hp: enemy.hp, max_hp: enemy.hp, ac: enemy.ac })),
       ].sort((a, b) => b.initiative - a.initiative);
-      const { error, data } = await supabase.from('combat').insert({ world_id: worldId, adventure_id: adventure.id, active: true, round: 1, turn_index: 0, combatants, log: [`${playerName.trim() || 'El Infernalista'} abre el encuentro de ${adventure.name}.`] }).select('*').single();
+      const overdue = new Set(overdueCharacterIds);
+      const waiting = combatants.filter((fighter) => fighter.kind === 'pc' && overdue.has(fighter.ref_id));
+      const startsAway = waiting.length > 0 && combatants.some((fighter) => fighter.kind === 'pc' && fighter.hp > 0 && !overdue.has(fighter.ref_id));
+      if (startsAway) for (const fighter of waiting) fighter.away = true;
+      const first = startsAway && combatants[0]?.kind === 'pc' && combatants[0].away ? nextTurn(combatants, 0, 1)?.turn_index ?? 0 : 0;
+      const log = [`${playerName.trim() || 'El Infernalista'} abre el encuentro de ${adventure.name}.`, ...(startsAway ? [`${waiting.map((fighter) => fighter.name).join(', ')} espera en la retaguardia hasta que su jugador vuelva.`] : [])];
+      const { error, data } = await supabase.from('combat').insert({ world_id: worldId, adventure_id: adventure.id, active: true, round: 1, turn_index: first, combatants, log }).select('*').single();
       if (error || !data) throw new Error('No se pudo abrir el combate. Inténtalo de nuevo.');
       setCombat(data as CombatRow);
       return 'El encuentro está en marcha. La iniciativa ya está ordenada.';
     }, 'combat');
   }
 
+  async function toggleRearguard(refId: string) {
+    if (!combat) return;
+    const fighter = combat.combatants.find((item) => item.ref_id === refId && item.kind === 'pc');
+    if (!fighter || fighter.hp <= 0) return;
+    const next = fighter.away ? rejoin(combat, refId) : withdraw(combat, refId);
+    if (!next) return;
+    await perform('retaguardia', async () => {
+      const saved = await saveCombatMove(combat, next);
+      if (!saved) {
+        await refreshCombat();
+        throw new Error('La mesa cambió. Revisa la iniciativa actualizada antes de intentarlo de nuevo.');
+      }
+      setCombat(saved.active ? saved : null);
+      return saved.active
+        ? fighter.away ? `${fighter.name} vuelve al frente; actuará cuando llegue su turno.` : `${fighter.name} espera a salvo en la retaguardia.`
+        : 'La compañía se repliega y el encuentro termina.';
+    }, 'select');
+  }
+
   async function changeTurn(finish = false) {
     if (!combat || combatError || !combat.combatants.length) return;
-    const count = combat.combatants.length;
-    let nextIndex = (combat.turn_index + 1) % count;
-    let round = combat.round + (nextIndex === 0 ? 1 : 0);
-    for (let attempts = 0; attempts < count - 1 && combat.combatants[nextIndex].hp <= 0; attempts++) {
-      nextIndex = (nextIndex + 1) % count;
-      if (nextIndex === 0) round++;
-    }
+    // Salta a los caídos y a quienes esperan en la retaguardia.
+    const turn = nextTurn(combat.combatants, combat.turn_index, combat.round);
+    const nextIndex = turn?.turn_index ?? combat.turn_index;
+    const round = turn?.round ?? combat.round;
     await perform('turno', async () => {
       const previousUpdate = Date.parse(combat.updated_at);
       const updatedAt = new Date(Math.max(Date.now(), Number.isFinite(previousUpdate) ? previousUpdate + 1 : 0)).toISOString();
@@ -256,7 +283,7 @@ export default function Infernalista({ world, characters, schemaOk, playerName, 
         <aside className="infernal-company" aria-labelledby="director-company-title">
           <div className="infernal-section-heading"><span className="infernal-step">II</span><div><p className="infernal-eyebrow">AL OTRO LADO DE LA MESA</p><h3 id="director-company-title">La compañía <span>{living.length}</span></h3></div></div>
           {!living.length && <p className="hint">Aún no hay héroes vivos. Abre la aventura y crea el primer personaje.</p>}
-          <ul className="infernal-party-list">{living.map((character) => <li key={character.id}><span className="character-avatar" aria-hidden="true">{character.name.slice(0, 1)}</span><div><strong>{character.name}</strong><small>{character.class_name} · Nv. {character.level}</small><div className="hp-bar" role="meter" aria-label={`Vida de ${character.name}`} aria-valuemin={0} aria-valuemax={character.max_hp} aria-valuenow={Math.max(0, character.hp)}><div style={{ width: `${Math.max(0, Math.min(100, character.hp / Math.max(1, character.max_hp) * 100))}%` }} /></div></div><span className={character.hp <= 0 ? 'infernal-critical' : ''}>{character.hp}<small>/{character.max_hp}</small></span></li>)}</ul>
+          <ul className="infernal-party-list">{living.map((character) => <li key={character.id}><CharacterPortrait species={character.species} profession={character.class_name} appearance={readAppearance(character.notes)} name={character.name} compact decorative className="character-avatar infernal-party-portrait" /><div><strong>{character.name}</strong><small>{character.class_name} · Nv. {character.level}</small><div className="hp-bar" role="meter" aria-label={`Vida de ${character.name}`} aria-valuemin={0} aria-valuemax={character.max_hp} aria-valuenow={Math.max(0, character.hp)}><div style={{ width: `${Math.max(0, Math.min(100, character.hp / Math.max(1, character.max_hp) * 100))}%` }} /></div></div><span className={character.hp <= 0 ? 'infernal-critical' : ''}>{character.hp}<small>/{character.max_hp}</small></span></li>)}</ul>
           <div className="infernal-world-law"><span aria-hidden="true">†</span><p>Una sola vida.<br /><small>Los héroes caídos permanecen en la historia. Su hoja y su nombre quedan sellados.</small></p></div>
         </aside>
 
@@ -264,8 +291,17 @@ export default function Infernalista({ world, characters, schemaOk, playerName, 
           <div className="infernal-section-heading"><span className="infernal-step">III</span><div><p className="infernal-eyebrow">EL PELIGRO TIENE ROSTRO</p><h3 id="director-combat-title">{combat ? 'El encuentro está vivo' : 'Prepara el encuentro'}</h3></div></div>
           {combat ? <>
             <div className="infernal-turn"><span>RONDA {combat.round}</span><p>Actúa <strong>{turn?.name ?? 'la compañía'}</strong></p></div>
-            <ol className="infernal-initiative">{combat.combatants.map((fighter, index) => <li key={fighter.ref_id} className={`${index === combat.turn_index % combat.combatants.length ? 'is-current' : ''} ${fighter.hp <= 0 ? 'is-down' : ''}`} aria-current={index === combat.turn_index % combat.combatants.length ? 'step' : undefined}><span className="infernal-initiative-value">{fighter.initiative}</span>{fighter.kind === 'enemy' ? <MonsterPortrait name={fighter.name} /> : <span className="character-avatar" aria-hidden="true">{fighter.name.slice(0, 1)}</span>}<strong>{fighter.name}</strong><span>{Math.max(0, fighter.hp)}<small>/{fighter.max_hp} vida</small></span></li>)}</ol>
-            <div className="infernal-publish-row"><button className="btn btn-primary" disabled={!available || !!combatError || !combat.combatants.some((fighter) => fighter.hp > 0)} onClick={() => void changeTurn()}>Siguiente turno →</button><button className="btn" onClick={onOpenPlay}>Resolver acciones</button></div>
+            <ol className="infernal-initiative">{combat.combatants.map((fighter, index) => {
+              const character = fighter.kind === 'pc' ? characters.find((item) => item.id === fighter.ref_id) : undefined;
+              return <li key={fighter.ref_id} className={`${index === combat.turn_index % combat.combatants.length ? 'is-current' : ''} ${fighter.hp <= 0 || fighter.away ? 'is-down' : ''}`} aria-current={index === combat.turn_index % combat.combatants.length ? 'step' : undefined}>
+                <span className="infernal-initiative-value">{fighter.initiative}</span>
+                {fighter.kind === 'enemy' ? <MonsterPortrait name={fighter.name} /> : character ? <CharacterPortrait species={character.species} profession={character.class_name} appearance={readAppearance(character.notes)} name={character.name} compact decorative className="character-avatar infernal-initiative-character" /> : <span className="character-avatar" aria-hidden="true">{fighter.name.slice(0, 1)}</span>}
+                <strong>{fighter.name}{fighter.away && <em className="away-tag">En la retaguardia</em>}</strong>
+                {fighter.kind === 'pc' && <button type="button" className="infernal-text-button infernal-initiative-control" disabled={!available || !!combatError || fighter.hp <= 0} onClick={() => void toggleRearguard(fighter.ref_id)}>{fighter.away ? 'Volver al frente' : 'Retirar a retaguardia'}</button>}
+                <span>{Math.max(0, fighter.hp)}<small>/{fighter.max_hp} vida</small></span>
+              </li>;
+            })}</ol>
+            <div className="infernal-publish-row"><button className="btn btn-primary" disabled={!available || !!combatError || !combat.combatants.some((fighter) => fighter.hp > 0)} onClick={() => void changeTurn()}>Siguiente turno →</button></div>
             {!confirmEnd ? <button className="infernal-text-button" disabled={!available || !!combatError} onClick={() => setConfirmEnd(true)}>Cerrar encuentro</button> : <div className="infernal-confirm"><p>El encuentro terminará para toda la mesa. La vida de los personajes se conserva.</p><button className="btn btn-danger" disabled={!available || !!combatError} onClick={() => void changeTurn(true)}>Confirmar cierre</button><button className="btn" disabled={!!pending} onClick={() => setConfirmEnd(false)}>Seguir jugando</button></div>}
           </> : <>
             <p className="infernal-encounter-intro">{adventure?.name ?? 'Elige una aventura'}</p>

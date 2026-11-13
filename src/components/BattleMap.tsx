@@ -3,15 +3,22 @@
 // mover hasta 6 casillas (30 pies). La distancia se mide con la regla de
 // Chebyshev: la diagonal cuenta como una sola casilla.
 import { playSound } from '../lib/audio';
-import { useEffect, useState, type CSSProperties } from 'react';
+import { useState, type CSSProperties } from 'react';
 import './BattleMap.css';
 import MonsterPortrait from './MonsterPortrait';
+import CharacterPortrait from './CharacterPortrait';
+import { readAppearance } from '../lib/appearance';
+import { clearDeathSaves } from '../lib/deathSaves.ts';
 import {
   supabase,
   type CharacterRow,
   type MapToken,
 } from '../lib/supabase';
 import { LUGARES, todosLosMapas, urlMapa } from '../lib/atlas';
+import CombatBoard from './CombatBoard';
+import { useActiveCombat, saveCombatMove } from '../hooks/useActiveCombat';
+import { useCombatActions } from '../hooks/useCombatActions';
+import { COMBAT_COLS, COMBAT_ROWS, moveCombatant } from '../lib/boardCombat';
 
 type Background = 'pergamino' | 'mazmorra' | 'bosque' | 'taberna' | 'nieve';
 
@@ -74,35 +81,50 @@ interface BattleMapProps {
   worldId: string | null;
   characters: CharacterRow[];
   schemaOk: boolean;
+  playerName: string;
+  onCharactersChange: () => void;
   /** Mapa del atlas abierto desde la pestaña Atlas (o null para cuadrícula de colores). */
   mapaInicial?: { slug: string; nombre: string } | null;
 }
 
-export default function BattleMap({ worldId, characters, schemaOk, mapaInicial }: BattleMapProps) {
+export default function BattleMap({ worldId, characters, schemaOk, playerName, onCharactersChange, mapaInicial }: BattleMapProps) {
+  const [combat, setCombat] = useActiveCombat(worldId, schemaOk);
+  const [moving, setMoving] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const actions = useCombatActions({
+    combat, setCombat, worldId, schemaOk, playerName, characters,
+    onCharactersChange, setResult: setNotice,
+  });
+  async function moveInCombat(refId: string, x: number, y: number) {
+    if (!combat || moving) return;
+    const next = moveCombatant(combat, refId, x, y, COMBAT_COLS, COMBAT_ROWS);
+    if (!next) return;
+    setMoving(true);
+    const saved = await saveCombatMove(combat, next);
+    setMoving(false);
+    if (saved) { setCombat(saved); playSound('move'); }
+    else setNotice('La mesa cambió mientras movías la ficha. Vuelve a intentarlo.');
+  }
   const [gridSize, setGridSize] = useState<number>(12);
   const [background, setBackground] = useState<Background>('pergamino');
   const [atlasMap, setAtlasMap] = useState<string | null>(mapaInicial?.slug ?? null);
-  const [mapName, setMapName] = useState('Mapa 1');
+  const [mapName, setMapName] = useState(mapaInicial?.nombre ?? 'Mapa 1');
   const [tokens, setTokens] = useState<MapToken[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showAddCharacter, setShowAddCharacter] = useState(false);
   const [showAddEnemy, setShowAddEnemy] = useState(false);
   const [measuring, setMeasuring] = useState(false);
   const [measurePoints, setMeasurePoints] = useState<{ x: number; y: number }[]>([]);
-  const [notice, setNotice] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-
-  // Cuando el Atlas abre un mapa aquí, se pone como fondo de la cuadrícula.
-  useEffect(() => {
-    if (mapaInicial) {
-      setAtlasMap(mapaInicial.slug);
-      setMapName((prev) => (prev === 'Mapa 1' || prev.trim() === '' ? mapaInicial.nombre : prev));
-    }
-  }, [mapaInicial]);
 
   const bg = BACKGROUNDS.find((b) => b.value === background) ?? BACKGROUNDS[0];
   const livingCharacters = characters.filter((c) => c.status === 'vivo');
   const selectedToken = tokens.find((t) => t.id === selectedId) ?? null;
+
+  function characterForToken(token: MapToken | null) {
+    if (!token?.id.startsWith('pc-')) return undefined;
+    return characters.find((character) => character.id === token.id.slice(3));
+  }
 
   function tokenAt(x: number, y: number): MapToken | undefined {
     return tokens.find((t) => t.x === x && t.y === y);
@@ -222,10 +244,12 @@ export default function BattleMap({ worldId, characters, schemaOk, mapaInicial }
         setNotice('Recupera la conexión antes de cambiar la vida de un personaje.');
         return;
       }
-      const { error } = await supabase.from('characters').update({ hp: newHp })
+      let query = supabase.from('characters').update(newHp > 0 ? { hp: newHp, notes: clearDeathSaves(character.notes) } : { hp: newHp })
         .eq('id', characterId).eq('world_id', worldId).eq('status', 'vivo')
-        .eq('hp', character.hp).select('id').single();
-      if (error) {
+        .eq('hp', character.hp);
+      if (newHp > 0) query = character.notes === null ? query.is('notes', null) : query.eq('notes', character.notes);
+      const { data, error } = await query.select('id').maybeSingle();
+      if (error || !data) {
         setNotice('No se pudo guardar la vida. Revisa la hoja actualizada antes de intentarlo de nuevo.');
         return;
       }
@@ -286,6 +310,17 @@ export default function BattleMap({ worldId, characters, schemaOk, mapaInicial }
         <div><p className="battle-eyebrow">Despliega la aventura</p><h2>Mesa de batalla</h2></div>
         <span className="battle-piece-count"><MapIcon kind="pieces" />{tokens.length} fichas en juego</span>
       </header>
+
+      {combat && <>
+        <div className="battle-live-combat" role="status">
+          <p><strong>Hay un combate en curso.</strong><small>Ronda {combat.round} · Actúa {combat.combatants[combat.turn_index % combat.combatants.length]?.name ?? 'la compañía'}. Los golpes y los movimientos se ven aquí en directo.</small></p>
+        </div>
+        <CombatBoard combat={combat} characters={characters} art={atlasMap ? urlMapa(atlasMap) : undefined} busy={moving || actions.pending}
+          onMove={(refId, x, y) => void moveInCombat(refId, x, y)}
+          onAttack={(attackerRefId, targetRefId) => void actions.runAction(() => actions.pcAttack(targetRefId, attackerRefId))}
+          onEnemyAttack={(enemyRefId) => void actions.runAction(() => actions.enemyAttack(enemyRefId))}
+          onPassTurn={() => void actions.runAction(actions.nextTurn)} />
+      </>}
 
       <div className="battle-tools">
         <details className="battle-setup">
@@ -351,7 +386,7 @@ export default function BattleMap({ worldId, characters, schemaOk, mapaInicial }
         <p className="battle-eyebrow">Elige quién entra en la mesa</p>
         {livingCharacters.length === 0 ? <p>No hay personajes vivos todavía.</p> : <div className="battle-character-choices">
           {livingCharacters.map((character) => <button key={character.id} type="button" className="battle-character-choice" onClick={() => addCharacter(character)}>
-            <span className="battle-avatar" aria-hidden="true">{character.name.charAt(0)}</span>
+            <CharacterPortrait species={character.species} profession={character.class_name} appearance={readAppearance(character.notes)} name={character.name} compact decorative className="battle-avatar" />
             <span><strong>{character.name}</strong><small>{character.class_name} · {character.hp}/{character.max_hp} vida</small></span>
             <span className="battle-add-mark" aria-hidden="true">+</span>
           </button>)}
@@ -395,7 +430,12 @@ export default function BattleMap({ worldId, characters, schemaOk, mapaInicial }
                     title={token ? `${token.name} · ${token.hp}/${token.max_hp} vida` : undefined}
                     aria-label={token ? `Casilla ${x + 1}, ${y + 1}: ${token.name}, ${token.hp} de ${token.max_hp} de vida` : `Casilla ${x + 1}, ${y + 1}: vacía`}>
                     {token && <span className={`battle-miniature ${token.id.startsWith('enemy-') ? 'battle-miniature-enemy' : 'battle-miniature-hero'} ${token.hp <= 0 ? 'battle-miniature-down' : ''}`} style={{ '--piece-accent': token.color } as CSSProperties}>
-                      {token.id.startsWith('enemy-') ? <MonsterPortrait name={token.name} className="battle-miniature-portrait" /> : <span className="battle-miniature-initial" aria-hidden="true">{token.name.charAt(0)}</span>}
+                      {token.id.startsWith('enemy-') ? <MonsterPortrait name={token.name} className="battle-miniature-portrait" /> : (() => {
+                        const character = characterForToken(token);
+                        return character
+                          ? <CharacterPortrait species={character.species} profession={character.class_name} appearance={readAppearance(character.notes)} name={character.name} compact decorative className="battle-miniature-portrait" />
+                          : <span className="battle-miniature-initial" aria-hidden="true">{token.name.charAt(0)}</span>;
+                      })()}
                       <span className="battle-miniature-health" aria-hidden="true">{token.hp}</span>
                     </span>}
                     {isMeasurePoint && !token && <span className="battle-measure-pin" aria-hidden="true">{measurePoints.findIndex((point) => point.x === x && point.y === y) + 1}</span>}
@@ -411,7 +451,12 @@ export default function BattleMap({ worldId, characters, schemaOk, mapaInicial }
           {selectedToken ? <>
             <p className="battle-eyebrow">Tu siguiente movimiento</p>
             <div className="selected-token-heading">
-              {selectedToken.id.startsWith('enemy-') ? <MonsterPortrait name={selectedToken.name} /> : <span className="battle-avatar battle-avatar-large" aria-hidden="true">{selectedToken.name.charAt(0)}</span>}
+              {selectedToken.id.startsWith('enemy-') ? <MonsterPortrait name={selectedToken.name} /> : (() => {
+                const character = characterForToken(selectedToken);
+                return character
+                  ? <CharacterPortrait species={character.species} profession={character.class_name} appearance={readAppearance(character.notes)} name={character.name} compact decorative className="battle-avatar battle-avatar-large" />
+                  : <span className="battle-avatar battle-avatar-large" aria-hidden="true">{selectedToken.name.charAt(0)}</span>;
+              })()}
               <div><strong>{selectedToken.name}</strong><small>Casilla {selectedToken.x + 1}, {selectedToken.y + 1}</small></div>
             </div>
             <div className="battle-vitals"><span>Vida</span><b>{selectedToken.hp}<small> / {selectedToken.max_hp}</small></b></div>
