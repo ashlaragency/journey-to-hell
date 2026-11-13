@@ -61,6 +61,15 @@ export function withdraw(combat: CombatRow, refId: string, automatic = false): C
     ? `${target.name} perdió el contacto con la mesa y se repliega a la retaguardia. Nadie puede atacarle hasta que vuelva.`
     : `${target.name} se repliega a la retaguardia. Nadie puede atacarle hasta que vuelva.`;
   const next: CombatRow = { ...combat, combatants, log: [...combat.log, line] };
+  const outcome = battleOutcome(combatants);
+  if (outcome) {
+    const ending = outcome === 'retreat'
+      ? 'La compañía se repliega; el encuentro termina.'
+      : outcome === 'victory'
+        ? 'La compañía vence; el encuentro termina.'
+        : 'Nadie queda en pie; el encuentro termina.';
+    return { ...next, active: false, log: [...next.log, ending] };
+  }
   if (combat.combatants.length && combat.turn_index % combat.combatants.length === index) {
     const turn = nextTurn(combatants, combat.turn_index, combat.round);
     if (turn) return { ...next, ...turn };

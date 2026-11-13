@@ -19,7 +19,7 @@ import CharacterPortrait from './CharacterPortrait';
 import CombatBoard from './CombatBoard';
 import { COMBAT_COLS, COMBAT_ROWS, moveCombatant } from '../lib/boardCombat';
 import { readAppearance } from '../lib/appearance';
-import { ABSENCE_GRACE_MS, absentCombatants, nextTurn as advanceTurn, playerKey, rejoin, withdraw } from '../lib/rearguard';
+import { nextTurn as advanceTurn, playerKey, rejoin, withdraw } from '../lib/rearguard';
 import { useCombatActions } from '../hooks/useCombatActions';
 import { clearDeathSaves, readDeathSaves, resolveDeathSave, writeDeathSaves } from '../lib/deathSaves.ts';
 import {
@@ -37,9 +37,7 @@ interface PlayProps {
   onCharactersChange: () => void;
   onCreateCharacter?: () => void;
   onOpenMap?: () => void;
-  /** Nombres de los jugadores conectados ahora mismo a la mesa. */
-  presentNames?: string[];
-  presenceConnected?: boolean;
+  overdueCharacterIds?: string[];
   sharedScene?: { id: string; adventureId: string; sceneIndex: number; place: string; narration: string; director: string } | null;
 }
 
@@ -58,8 +56,6 @@ interface Adv {
 }
 
 const DC_EXPLORAR = 12;
-const NOBODY: string[] = [];
-
 const EXPLORATION_ACTIONS = [
   { skill: 'Percepción', label: 'Mirar', title: 'Mirar a mi alrededor', detail: 'Observa lo que otros pasan por alto.', icon: 'eye' },
   { skill: 'Persuasión', label: 'Hablar', title: 'Hablar con alguien', detail: 'Una palabra puede abrir un camino.', icon: 'voice' },
@@ -109,7 +105,7 @@ function skillMod(c: CharacterRow, skillName: string): number {
   return base + prof;
 }
 
-export default function Play({ world, characters, schemaOk, playerName, onCharactersChange, onCreateCharacter, onOpenMap, sharedScene, presentNames = NOBODY, presenceConnected = false }: PlayProps) {
+export default function Play({ world, characters, schemaOk, playerName, onCharactersChange, onCreateCharacter, onOpenMap, sharedScene, overdueCharacterIds = [] }: PlayProps) {
   const [adventures, setAdventures] = useState<Adv[]>(ADVENTURES_SEED.map((a, i) => ({ ...a, id: `seed-${i}` })));
   const [adventureError, setAdventureError] = useState<string | null>(null);
   const [advId, setAdvId] = useState<string>(() => localStorage.getItem('jth_adv') ?? '');
@@ -122,6 +118,7 @@ export default function Play({ world, characters, schemaOk, playerName, onCharac
   }
   const [combat, setCombat] = useState<CombatRow | null>(null);
   const [fallForm, setFallForm] = useState<string | null>(null);
+  const [deathSavePending, setDeathSavePending] = useState<Set<string>>(() => new Set());
   const [legacyKind, setLegacyKind] = useState<'tumba' | 'cancion' | 'leyenda' | 'objeto' | 'lugar'>('leyenda');
   const [legacyTitle, setLegacyTitle] = useState('');
   const [legacyBody, setLegacyBody] = useState('');
@@ -135,25 +132,6 @@ export default function Play({ world, characters, schemaOk, playerName, onCharac
   );
   const characterById = useMemo(() => new Map(characters.map((character) => [character.id, character])), [characters]);
   const ownerById = useMemo(() => new Map(characters.map((character) => [character.id, character.owner_name])), [characters]);
-  // Desde cuándo falta cada jugador. Solo se confía en la lista mientras esta
-  // pestaña sigue conectada: sin conexión no sabemos quién está y quién no.
-  const absentSince = useRef(new Map<string, number>());
-  useEffect(() => {
-    if (!presenceConnected) { absentSince.current.clear(); return; }
-    const present = new Set(presentNames.map(playerKey));
-    const now = Date.now();
-    for (const owner of new Set(characters.map((character) => playerKey(character.owner_name)))) {
-      if (!owner || present.has(owner)) absentSince.current.delete(owner);
-      else if (!absentSince.current.has(owner)) absentSince.current.set(owner, now);
-    }
-  }, [presentNames, presenceConnected, characters]);
-  function overdueAbsences(combatants: Combatant[]): string[] {
-    if (!presenceConnected) return [];
-    const now = Date.now();
-    return absentCombatants(combatants, ownerById, presentNames)
-      .filter(({ owner }) => now - (absentSince.current.get(owner) ?? now) >= ABSENCE_GRACE_MS)
-      .map(({ refId }) => refId);
-  }
   const selectedAdventureId = sharedScene?.adventureId ?? advId;
   const adventure = useMemo(
     () => adventures.find((a) => a.id === selectedAdventureId) ?? (sharedScene ? null : adventures[0]) ?? null,
@@ -302,7 +280,7 @@ export default function Play({ world, characters, schemaOk, playerName, onCharac
     ].sort((a, b) => b.initiative - a.initiative);
     // Quien lleva un rato fuera de la mesa empieza a salvo en la retaguardia,
     // siempre que quede alguien en el frente para pelear.
-    const overdue = new Set(overdueAbsences(combatants));
+    const overdue = new Set(overdueCharacterIds);
     const waiting = combatants.filter((item) => overdue.has(item.ref_id));
     const startsAway = waiting.length > 0 && combatants.some((item) => item.kind === 'pc' && item.hp > 0 && !overdue.has(item.ref_id));
     if (startsAway) for (const item of waiting) item.away = true;
@@ -365,30 +343,11 @@ export default function Play({ world, characters, schemaOk, playerName, onCharac
     playSound('select');
   }
 
-  // Retirada automática: si un jugador lleva un rato desconectado, cualquier
-  // pestaña que siga en la mesa pone a su personaje a salvo. Si dos lo intentan
-  // a la vez, solo se guarda una vez y la otra se actualiza en silencio.
-  useEffect(() => {
-    if (!combat?.active || !presenceConnected) return;
-    const check = async () => {
-      if (writeInProgress.current) return;
-      const overdue = overdueAbsences(combat.combatants);
-      if (!overdue.length) return;
-      let next = combat;
-      for (const refId of overdue) next = withdraw(next, refId, true) ?? next;
-      if (next === combat) return;
-      writeInProgress.current = true;
-      try { await combatActions.persistCombat(next, undefined, undefined, true); } catch { /* Se reintenta en la próxima comprobación. */ } finally { writeInProgress.current = false; }
-    };
-    const timer = window.setInterval(() => { void check(); }, 5000);
-    return () => window.clearInterval(timer);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [combat, presenceConnected, presentNames, ownerById]);
-
   async function deathSave(char: CharacterRow) {
     const saves = readDeathSaves(char.notes);
     if (!schemaOk || char.status !== 'vivo' || char.hp > 0 || saves.successes >= 3 || saves.failures >= 3 || deathSaveInProgress.current.has(char.id)) return;
     deathSaveInProgress.current.add(char.id);
+    setDeathSavePending((previous) => new Set(previous).add(char.id));
     const d20 = rollDie(20);
     try {
       const resolution = resolveDeathSave(saves, d20);
@@ -432,6 +391,7 @@ export default function Play({ world, characters, schemaOk, playerName, onCharac
       onCharactersChange();
     } finally {
       deathSaveInProgress.current.delete(char.id);
+      setDeathSavePending((previous) => { const next = new Set(previous); next.delete(char.id); return next; });
     }
   }
 
@@ -688,7 +648,7 @@ export default function Play({ world, characters, schemaOk, playerName, onCharac
       {dying.map((c) => {
         const saves = readDeathSaves(c.notes);
         const terminal = saves.successes >= 3 || saves.failures >= 3;
-        const saving = deathSaveInProgress.current.has(c.id);
+        const saving = deathSavePending.has(c.id);
         return (
           <div key={c.id} className="card danger-card">
             <h3>{c.name} está a 0 de vida</h3>

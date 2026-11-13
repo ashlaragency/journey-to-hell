@@ -106,6 +106,7 @@
 .infernal-initiative strong { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: .85rem; }
 .infernal-initiative li > span:last-child { font-size: .88rem; color: #e1c19d; white-space: nowrap; }
 .infernal-initiative small { color: #bda793; font-size: .72rem; }
+.infernal-initiative .infernal-initiative-control { flex: 0 0 auto; padding: 4px 7px; font-size: .67rem; white-space: nowrap; }
 .infernal-publish-row { display: flex; flex-wrap: wrap; gap: 10px; margin: 16px 0 10px; }
 .infernal-confirm { padding: 15px; border: 1px solid #ab6751; background: #4c27222e; margin-top: 12px; }
 .infernal-confirm p { font-size: .85rem; color: #edc6b7; margin-bottom: 12px; }
@@ -164,7 +165,8 @@
   .infernal-enemies small { font-size: .64rem; }
   .infernal-publication { margin-top: 23px; }
   .infernal-publish-row { flex-direction: column; }
-  .infernal-initiative li { gap: 7px; padding: 8px 6px; }
+  .infernal-initiative li { gap: 7px; padding: 8px 6px; flex-wrap: wrap; }
+  .infernal-initiative .infernal-initiative-control { margin-left: 62px; }
   .infernal-trust { text-align: left; margin-bottom: 27px; }
 }
 @media (prefers-reduced-motion: reduce) {

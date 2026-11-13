@@ -21,6 +21,7 @@ import { readAppearance } from './lib/appearance';
 import { clearDeathSaves } from './lib/deathSaves.ts';
 import { useSession } from './hooks/useSession';
 import { useTablePresence } from './hooks/useTablePresence';
+import { useCombatAbsenceGuard } from './hooks/useCombatAbsenceGuard';
 import './LivingShell.css';
 
 const CharacterCreator = lazy(() => import('./components/CharacterCreator'));
@@ -58,6 +59,13 @@ export default function App() {
   const session = useSession(world?.id, schemaOk);
   const presence = useTablePresence(world?.id, schemaOk, playerName, role);
   const presentNames = useMemo(() => presence.members.map((member) => member.name), [presence.members]);
+  const { overdueCharacterIds } = useCombatAbsenceGuard({
+    worldId: world?.id,
+    schemaOk,
+    characters,
+    presentNames,
+    presenceConnected: presence.connected,
+  });
   const sharedScene = session.cue?.payload.active ? { id: session.cue.id, ...session.cue.payload } : null;
   useEffect(() => {
     const onVisibility = () => setPageHidden(document.hidden);
@@ -220,8 +228,7 @@ export default function App() {
               playerName={playerName}
               onCharactersChange={fetchAll}
               sharedScene={sharedScene}
-              presentNames={presentNames}
-              presenceConnected={presence.connected}
+              overdueCharacterIds={overdueCharacterIds}
               onCreateCharacter={openCreator}
               onOpenMap={() => navigate('mapa')}
             />
@@ -338,7 +345,7 @@ export default function App() {
         )}
 
         <Suspense fallback={<p role="status">Cargando sección…</p>}>
-          {tab === 'infernalista' && <Infernalista world={world} characters={characters} schemaOk={schemaOk} playerName={playerName} onOpenMap={() => navigate('mapa')} onOpenPlay={() => navigate('jugar')} />}
+          {tab === 'infernalista' && <Infernalista world={world} characters={characters} schemaOk={schemaOk} playerName={playerName} overdueCharacterIds={overdueCharacterIds} onOpenMap={() => navigate('mapa')} onOpenPlay={() => navigate('jugar')} />}
           {tab === 'mundo' && <WorldPanel world={world} schemaOk={schemaOk} playerName={playerName} />}
 
           {tab === 'mapa' && (

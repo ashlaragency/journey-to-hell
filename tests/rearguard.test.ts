@@ -18,6 +18,12 @@ describe('Retaguardia', () => {
     assert.deepEqual(enemyTargets(next.combatants).map((item) => item.name), ['Bram']);
     assert.match(next.log.at(-1) ?? '', /Iria se repliega/);
   });
+  it('termina en repliegue si el último héroe del frente se retira', () => {
+    const next = withdraw(combat([pc('Iria'), enemy('Goblin')]), 'Iria', true);
+    assert.equal(next?.active, false);
+    assert.equal(next?.combatants[0].away, true);
+    assert.match(next?.log.at(-1) ?? '', /repliega|retirada/i);
+  });
   it('pasa el turno si quien se va tenía el turno', () => {
     const next = withdraw(combat([pc('Iria'), enemy('Goblin'), pc('Bram')], 0), 'Iria', true);
     assert.equal(next?.turn_index, 1);
