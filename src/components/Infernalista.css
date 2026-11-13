@@ -1,0 +1,179 @@
+.infernalista { --infernal-ink: #30241c; --infernal-red: #8b252a; --infernal-paper: #e8d9ba; --infernal-dim: #c5b4a2; color: #f2e5d6; }
+.infernal-masthead { display: flex; justify-content: space-between; flex-wrap: wrap; align-items: center; gap: 12px; margin: 0 0 18px; }
+.infernal-eyebrow { font: 500 .67rem/1.5 Barlow, sans-serif; letter-spacing: .17em; color: #ddbd91; }
+.infernal-live { display: flex; align-items: center; gap: 8px; font-size: .75rem; color: #d3c2ad; }
+.infernal-live > span { width: 6px; height: 6px; background: #9b8c82; border-radius: 100%; }
+.infernal-live > .is-live { background: #a7cda6; box-shadow: 0 0 12px #a7cda64d; }
+.infernal-book { position: relative; isolation: isolate; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: stretch; color: var(--infernal-ink); border: solid #422b21; border-width: 5px 7px 9px; border-radius: 7px 12px 12px 7px; background: #e8d9ba; box-shadow: 0 22px 60px #0006, 0 2px 0 1px #9a7752, 0 6px 0 1px #39251b; color-scheme: light; }
+.infernal-book::before { content: ''; position: absolute; pointer-events: none; inset: 7px -3px -5px; z-index: -1; border: 1px solid #ac916a; border-radius: 3px; background: repeating-linear-gradient(0deg, #c9b28e 0 1px, #f1e0bb 1px 3px); }
+.infernal-book-binding { position: absolute; z-index: 3; pointer-events: none; top: 0; bottom: 0; width: 34px; left: calc(50% - 17px); background: linear-gradient(90deg, transparent, #5a42201d 25%, #5a422057 48%, #34200e80 50%, #f8eac755 56%, #54331917 80%, transparent); }
+.infernal-page { position: relative; min-width: 0; display: flex; flex-direction: column; padding: clamp(25px, 3vw, 45px) clamp(22px, 3vw, 43px) 24px; background-color: var(--infernal-paper); background-image: radial-gradient(ellipse at 12% 24%, #b38a4022, transparent 46%), radial-gradient(ellipse at 95% 90%, #9d64282b, transparent 45%), repeating-linear-gradient(23deg, #fff6dd07 0 1px, transparent 1px 4px); }
+.infernal-page-left { border-radius: 3px 0 0 3px; background-image: linear-gradient(90deg, #ba98621a, #fff7dd3d 12%, transparent 80%, #83603214), radial-gradient(ellipse at 5% 22%, #b98c392b, transparent 50%), repeating-linear-gradient(23deg, #fff6dd09 0 1px, transparent 1px 4px); }
+.infernal-page-right { border-radius: 0 6px 6px 0; background-image: linear-gradient(90deg, #83603214, transparent 20%, #fff7dd38 90%, #ba986225), radial-gradient(ellipse at 100% 80%, #a97a3226, transparent 50%), repeating-linear-gradient(-23deg, #fff6dd09 0 1px, transparent 1px 4px); }
+.infernal-book :focus-visible { outline-color: #8b252a; outline-offset: 4px; }
+.infernal-book-title { position: relative; min-height: 190px; padding-bottom: 25px; margin-bottom: 27px; border-bottom: 3px double #9d784b; }
+.infernal-book-title::after { content: '◆'; position: absolute; bottom: -11px; left: 0; width: 24px; font-size: 13px; color: #8b252a; background: #e8d9ba; }
+.infernal-book .infernal-eyebrow { color: #854128; }
+.infernal-book-title h2 { position: relative; font: 400 clamp(1.9rem, 2.8vw, 3rem)/1.18 Cinzel, Georgia, serif; color: #30241c; margin: 17px 0 16px; max-width: 12ch; }
+.infernal-book-title h2 em { color: #8b252a; font-size: .59em; font-style: normal; display: inline-block; line-height: 1.5; }
+.infernal-book-title > p:last-child { position: relative; max-width: 34ch; color: #634b37; font: italic .91rem/1.65 Georgia, serif; }
+.infernal-guardian { position: absolute; right: -8px; top: -12px; width: 41%; height: 200px; opacity: .55; background: url('/art/grimoire-guardian.webp') center / contain no-repeat; mix-blend-mode: multiply; pointer-events: none; }
+.infernal-section-heading { display: flex; gap: 13px; align-items: center; padding: 0 0 17px; margin-bottom: 20px; border-bottom: 1px solid #87644460; }
+.infernal-section-heading h3 { margin-top: 4px; color: #f0dfd0; font-size: 1.12rem; }
+.infernal-section-heading h3 > span { font: 400 .85rem Barlow, sans-serif; color: #dab28f; margin-left: 10px; }
+.infernal-step { display: inline-flex; align-items: center; justify-content: center; min-width: 32px; min-height: 40px; color: #d4a077; font: 1.55rem Cinzel, serif; }
+.infernal-book .infernal-section-heading { border: 0; margin-bottom: 17px; padding: 0; gap: 12px; }
+.infernal-book .infernal-section-heading h3 { color: #3d2b1f; font-size: 1.13rem; }
+.infernal-book .infernal-step { font-size: 2.35rem; color: #8b252a; line-height: 1; }
+.infernalista label, .infernalista .hint { color: var(--infernal-dim); }
+.infernal-book label, .infernal-book .hint { color: #69513e; }
+.infernal-book label { font-size: .8rem; }
+.infernalista select { background: #f5e5c5; border: 1px solid #b8986c; border-radius: 1px; color: #30241c; margin: 7px 0 15px; min-height: 47px; font-size: .87rem; }
+.infernal-adventure-description { color: #65503d; font: .93rem/1.7 Georgia, serif; margin-bottom: 21px; }
+.infernal-index-label { font-size: .62rem; font-weight: 600; letter-spacing: .18em; color: #725239; margin: 22px 0 12px; }
+.infernal-scene-path { list-style: none; display: flex; flex-direction: column; gap: 0; padding: 0; margin: 0 0 16px; border-top: 1px solid #b2936b; }
+.infernal-scene-path button { position: relative; width: 100%; min-height: 57px; display: flex; align-items: center; gap: 12px; text-align: left; background: transparent; border: 0; border-bottom: 1px solid #b2936b88; border-radius: 0; color: #4c3828; padding: 11px 10px 11px 0; transition: background .18s, color .18s; }
+.infernal-scene-path button > span { color: #8b252a; font: 1.05rem Cinzel, serif; min-width: 26px; }
+.infernal-scene-path b { font-weight: 500; font-size: .87rem; flex: 1; }
+.infernal-scene-path button > small { border: 1px solid #9d7756; padding: 3px 5px; color: #7a3027; font-size: .64rem; white-space: nowrap; }
+.infernal-scene-path button:hover:not(:disabled) { background: #a87b3c18; }
+.infernal-scene-path button.is-selected { color: #7c2025; background: linear-gradient(90deg, #8b252a10, transparent); box-shadow: -4px 0 #8b252a; padding-left: 9px; }
+.infernal-page-rubric { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-bottom: 16px; margin-bottom: 25px; border-bottom: 1px solid #af8c5c; color: #75462e; font-size: .61rem; letter-spacing: .12em; }
+.infernal-page-rubric > span:last-child { color: #8b252a; font: 1.3rem Cinzel, serif; letter-spacing: 0; }
+.infernal-scene-preview { padding: 0; margin: 0; animation: infernal-page-arrive .4s ease-out both; }
+.infernal-scene-preview h3 { font: 400 clamp(1.6rem, 2.1vw, 2.45rem)/1.25 Cinzel, Georgia, serif; color: #3c291d; margin: 12px 0 20px; text-wrap: balance; }
+.infernal-narration { color: #3f3025; font: 1.03rem/1.85 Georgia, 'Times New Roman', serif; }
+.infernal-narration::first-letter { float: left; color: #8b252a; font: 3.7rem/.85 Cinzel, Georgia, serif; margin: 7px 8px 0 0; }
+.infernal-publication { margin: 27px 0 15px; }
+.infernalista .btn { border-color: #896348; background: #34251c; color: #f0d1b1; font-size: .88rem; }
+.infernalista .btn:hover:not(:disabled) { border-color: #d1a078; background: #483020; }
+.infernalista .btn-primary { color: #211710; background: #d8a16e; border-color: #d8a16e; }
+.infernalista .btn-primary:hover:not(:disabled) { color: #211710; background: #f0bd88; }
+.infernalista .btn-danger { background: #442620; border-color: #a3634b; color: #f7c2aa; }
+.infernal-book .btn.infernal-seal { position: relative; display: flex; width: 100%; align-items: center; gap: 14px; min-height: 73px; padding: 12px 17px; border: 1px solid #671d22; border-radius: 2px; background: #8b252a; color: #fff0da; text-align: left; box-shadow: 0 3px 0 #681a20, inset 0 0 0 3px #ffffff09; transition: background .2s, transform .2s; }
+.infernal-book .btn.infernal-seal:hover:not(:disabled) { color: #fff4e3; border-color: #64151a; background: #a22e32; transform: translateY(-1px); }
+.infernal-seal > span:last-child { flex: 1; line-height: 1.4; font-size: .87rem; font-weight: 600; }
+.infernal-seal small { display: block; color: #f3c8ae; margin-top: 4px; font: 400 .68rem/1.5 Barlow, sans-serif; }
+.infernal-seal-mark { display: grid; place-items: center; flex: 0 0 auto; width: 40px; height: 42px; border: 1px solid #e4ae875c; border-radius: 50%; box-shadow: inset 0 0 0 3px #ffffff08; font: 1.5rem Cinzel, serif; color: #f0c19a; }
+.infernal-text-button { min-height: 44px; border: 0; background: transparent; color: #e1b48b; padding: 10px 0; text-align: left; align-self: start; text-decoration: underline; text-underline-offset: 4px; font-size: .82rem; }
+.infernal-book .infernal-text-button { color: #82272a; text-decoration-color: #82272a65; }
+.infernal-current { display: flex; flex-direction: column; gap: 6px; margin-top: 24px; padding: 15px 0 0; border-top: 1px dashed #a88a62; font-size: .77rem; color: #66503a; line-height: 1.65; }
+.infernal-book-links { display: flex; flex-wrap: wrap; gap: 4px 18px; margin: 14px 0 20px; }
+.infernal-bestiary { margin-top: 6px; }
+.infernal-bestiary-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-top: 1px solid #ae8e61; padding-top: 18px; margin-bottom: 17px; }
+.infernal-bestiary-title h4 { font: .9rem/1.4 Cinzel, serif; text-align: center; color: #6e3827; }
+.infernal-bestiary-title > span { color: #8b252a; font: 1.4rem Georgia, serif; }
+.infernal-enemies { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; margin-bottom: 20px; }
+.infernal-enemies article { min-width: 0; text-align: center; }
+.infernal-enemies .monster-portrait { width: 100%; height: auto; aspect-ratio: 1.2; border: 1px solid #a27d54; border-radius: 45% 45% 2px 2px; margin-bottom: 10px; filter: sepia(.35) saturate(.7); box-shadow: 0 3px 7px #50341a1c; }
+.infernal-enemies h4 { color: #3d281b; font: .9rem/1.4 Cinzel, serif; }
+.infernal-enemies p { font-size: .73rem; margin-top: 6px; color: #6b5039; line-height: 1.5; }
+.infernal-enemies small { display: block; margin-top: 4px; color: #715239; font-size: .67rem; }
+.infernal-folio { display: flex; align-items: center; justify-content: center; gap: 15px; margin-top: auto; padding-top: 26px; color: #765335; font: .59rem Cinzel, serif; letter-spacing: .18em; }
+.infernal-folio > span { width: 38px; height: 1px; background: #a38153; }
+.infernal-trust { font-size: .74rem; color: #c2ad99; margin: 17px 0 36px; text-align: center; }
+.infernal-notice { margin-bottom: 24px; padding: 14px 20px; border-left: 2px solid #d8ab79; background: #4d342840; color: #f2d9bf; font-size: .95rem; }
+.infernal-notice.is-error { border-color: #ed9888; background: #6f342a40; }
+.infernalista > .banner-warning { margin-bottom: 20px; }
+.infernal-support { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 28px; align-items: start; }
+.infernal-support > * { min-width: 0; }
+.infernal-company, .infernal-encounter, .infernal-twists { padding: 24px; border: 1px solid #76533455; background: linear-gradient(130deg, #241b14, #171410); }
+.infernal-support .infernal-eyebrow { font-size: .61rem; }
+.infernal-party-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 15px; max-height: 410px; overflow: auto; scrollbar-color: #71543d transparent; }
+.infernal-party-list li { display: flex; align-items: center; gap: 11px; padding-bottom: 15px; border-bottom: 1px solid #60423555; }
+.infernal-party-list li > div { flex: 1; min-width: 0; }
+.infernal-party-list strong { display: block; font-size: .88rem; overflow-wrap: anywhere; }
+.infernal-party-list small { display: block; color: #c3ad9a; font-size: .75rem; margin-top: 5px; }
+.infernal-party-list li > span:last-child { font-size: 1.1rem; color: #eed1b5; }
+.infernal-party-list .hp-bar { background: #3d3024; }
+.infernal-party-list .hp-bar > div { background: #c89b66; }
+.infernal-party-list .infernal-critical { color: #ffada1 !important; }
+.infernal-world-law { display: flex; gap: 15px; padding-top: 28px; color: #d4b89b; }
+.infernal-world-law > span { font: 2rem Cinzel, serif; color: #bf8e62; }
+.infernal-world-law small { color: #bca798; font-size: .78rem; }
+.infernal-encounter-intro { color: #e2c6a6; font: 1.25rem/1.5 Cinzel, serif; margin-bottom: 14px; }
+.infernal-encounter > .btn { margin: 20px 0 12px; }
+.infernal-turn { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; align-items: center; }
+.infernal-turn > span { color: #dfaf7e; letter-spacing: .12em; font-size: .7rem; }
+.infernal-turn p { font-size: .88rem; color: #dcc3ab; }
+.infernal-initiative { list-style: none; padding: 0; margin: 0 0 18px; display: flex; flex-direction: column; gap: 7px; }
+.infernal-initiative li { display: flex; gap: 10px; align-items: center; min-width: 0; padding: 8px 10px; border: 1px solid #63483266; background: #211a16; }
+.infernal-initiative li.is-current { border-color: #e0ad75; background: #55372570; box-shadow: inset 3px 0 #e0ad75; }
+.infernal-initiative li.is-down { opacity: .6; }
+.infernal-initiative-value { width: 22px; color: #d7ab7d; font-size: .9rem; }
+.infernal-initiative .monster-portrait { width: 36px; height: 42px; min-width: 36px; border-radius: 2px; }
+.infernal-initiative .character-avatar { width: 36px; height: 42px; }
+.infernal-initiative strong { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: .85rem; }
+.infernal-initiative li > span:last-child { font-size: .88rem; color: #e1c19d; white-space: nowrap; }
+.infernal-initiative small { color: #bda793; font-size: .72rem; }
+.infernal-initiative .infernal-initiative-control { flex: 0 0 auto; padding: 4px 7px; font-size: .67rem; white-space: nowrap; }
+.infernal-publish-row { display: flex; flex-wrap: wrap; gap: 10px; margin: 16px 0 10px; }
+.infernal-confirm { padding: 15px; border: 1px solid #ab6751; background: #4c27222e; margin-top: 12px; }
+.infernal-confirm p { font-size: .85rem; color: #edc6b7; margin-bottom: 12px; }
+.infernal-confirm .btn { margin-right: 8px; margin-top: 6px; }
+.infernal-twists { grid-column: 1 / -1; }
+.infernal-twist-options { display: flex; flex-wrap: wrap; gap: 8px; }
+.infernal-twist-options button { min-height: 44px; color: #c9ac90; border: 1px solid #604235; padding: 8px 11px; background: transparent; font-size: .77rem; }
+.infernal-twist-options .is-selected { color: #f5d7b5; border-color: #c28a57; background: #55362066; }
+.infernal-twists blockquote { font: 1.1rem/1.8 Cinzel, serif; margin: 25px 0; color: #ead3bb; max-width: 70ch; }
+.infernal-twists > .hint { margin-top: 14px; font-size: .8rem; }
+@keyframes infernal-page-arrive { from { opacity: .4; transform: translateY(7px); } to { opacity: 1; transform: none; } }
+@media (max-width: 1180px) {
+  .infernal-page { padding: 27px 25px 21px; }
+  .infernal-book-title h2 { font-size: 2.1rem; }
+  .infernal-guardian { width: 42%; opacity: .35; }
+  .infernal-scene-preview h3 { font-size: 1.85rem; }
+  .infernal-enemies { gap: 10px; }
+  .infernal-support { gap: 20px; }
+  .infernal-company, .infernal-encounter, .infernal-twists { padding: 21px; }
+}
+@media (max-width: 850px) {
+  .infernal-book { grid-template-columns: minmax(0, 1fr); border-width: 4px 5px 7px 8px; }
+  .infernal-book-binding { left: 0; width: 14px; background: linear-gradient(90deg, #4b2c2466, transparent); }
+  .infernal-page { padding: 28px 30px 24px; }
+  .infernal-page-left { border-radius: 2px 4px 0 0; }
+  .infernal-page-right { border-radius: 0 0 4px 2px; border-top: 3px double #997144; }
+  .infernal-guardian { width: 170px; right: 0; opacity: .55; }
+  .infernal-book-title h2 { max-width: 16ch; font-size: 2.4rem; }
+  .infernal-book-title { min-height: 165px; }
+  .infernal-book-links { margin-bottom: 0; }
+  .infernal-page-left .infernal-folio { display: none; }
+  .infernal-scene-preview h3 { font-size: 2rem; }
+  .infernal-enemies { grid-template-columns: repeat(auto-fit, minmax(min(170px, 100%), 1fr)); gap: 20px; }
+  .infernal-enemies .monster-portrait { max-height: 205px; max-width: 230px; }
+  .infernal-support { grid-template-columns: minmax(0, 1fr); }
+  .infernal-party-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr)); }
+  .infernal-world-law { padding-top: 12px; }
+}
+@media (max-width: 500px) {
+  .infernal-masthead { gap: 9px; margin-bottom: 15px; }
+  .infernal-page { padding: 25px 20px 22px; }
+  .infernal-book-title h2 { font-size: 1.9rem; }
+  .infernal-book-title > p:last-child { font-size: .83rem; }
+  .infernal-guardian { width: 110px; right: -12px; top: -7px; height: 150px; opacity: .3; }
+  .infernal-book-title { padding-bottom: 21px; margin-bottom: 22px; min-height: 0; }
+  .infernal-scene-path button { padding-right: 0; gap: 8px; }
+  .infernal-scene-path b { font-size: .82rem; }
+  .infernal-section-heading h3 { font-size: 1.05rem; }
+  .infernal-scene-preview h3 { font-size: 1.7rem; }
+  .infernal-narration { font-size: .97rem; line-height: 1.8; }
+  .infernal-book .btn.infernal-seal { padding: 12px; gap: 10px; }
+  .infernal-seal > span:last-child { font-size: .8rem; }
+  .infernal-enemies { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .infernal-enemies h4 { font-size: .78rem; }
+  .infernal-enemies p { font-size: .7rem; }
+  .infernal-enemies small { font-size: .64rem; }
+  .infernal-publication { margin-top: 23px; }
+  .infernal-publish-row { flex-direction: column; }
+  .infernal-initiative li { gap: 7px; padding: 8px 6px; flex-wrap: wrap; }
+  .infernal-initiative .infernal-initiative-control { margin-left: 62px; }
+  .infernal-trust { text-align: left; margin-bottom: 27px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .infernalista *, .infernalista *::before, .infernalista *::after { animation: none !important; transition-duration: 0.01ms !important; }
+}
+.motion-paused .infernalista *, .motion-paused .infernalista *::before, .motion-paused .infernalista *::after { animation-play-state: paused !important; transition-duration: 0s !important; }
+.motion-paused .infernal-scene-preview { animation: none !important; }
+.infernal-guardian { mask-image: radial-gradient(ellipse at center, #000 25%, #0009 47%, transparent 72%); }
+.infernal-enemies > article:only-child { grid-column: 1 / -1; width: min(68%, 230px); justify-self: center; }
+@media (min-width: 851px) { .infernal-guardian { width: 49%; height: 220px; top: -20px; } }

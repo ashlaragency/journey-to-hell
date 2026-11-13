@@ -2,7 +2,7 @@
 // Regla dura: el único campo que se escribe en todo el flujo es el nombre.
 // Todo lo demás se elige tocando tarjetas, chips o botones.
 import { playSound } from '../lib/audio';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   SPECIES,
   CLASSES,
@@ -26,6 +26,9 @@ import {
   type BackgroundOpt,
 } from '../lib/data';
 import { supabase, type CharacterRow } from '../lib/supabase';
+import CharacterPortrait from './CharacterPortrait';
+import { DEFAULT_APPEARANCE, HAIR_COLORS, HAIR_STYLES, writeAppearance, type CharacterAppearance } from '../lib/appearance';
+import './CharacterCreator.css';
 
 type AbilityKey = (typeof ABILITIES)[number];
 type Scores = Record<AbilityKey, number>;
@@ -33,8 +36,9 @@ type HpOption = 'completa' | 'mitad' | 'casi';
 
 const STEP_TITLES = [
   'Nombre',
-  'Especie',
+  'Raza',
   'Clase',
+  'Apariencia',
   'Trasfondo',
   'Características',
   'Habilidades',
@@ -88,6 +92,7 @@ export default function CharacterCreator({
   const [name, setName] = useState('');
   const [species, setSpecies] = useState<SpeciesOpt | null>(null);
   const [cls, setCls] = useState<ClassOpt | null>(null);
+  const [appearance, setAppearance] = useState<CharacterAppearance>(DEFAULT_APPEARANCE);
   const [background, setBackground] = useState<BackgroundOpt | null>(null);
   const [scores, setScores] = useState<Scores | null>(null);
   const [scoreMethod, setScoreMethod] = useState<'recomendado' | 'dados' | null>(null);
@@ -101,6 +106,7 @@ export default function CharacterCreator({
   const [motivation, setMotivation] = useState('');
   const [hpOption, setHpOption] = useState<HpOption>('completa');
   const [creating, setCreating] = useState(false);
+  const creatingRef = useRef(false);
   const [error, setError] = useState('');
 
   const backgroundSkills = background?.skills ?? [];
@@ -140,12 +146,12 @@ export default function CharacterCreator({
 
   function applyRecommended() {
     if (!cls) return;
-    const order: AbilityKey[] = [
+    const order: AbilityKey[] = [...new Set<AbilityKey>([
       cls.primary,
       'CON',
       'DES',
       ...ABILITIES.filter((a) => a !== cls.primary && a !== 'CON' && a !== 'DES'),
-    ];
+    ])].slice(0, ABILITIES.length);
     const next = {} as Scores;
     order.forEach((ability, i) => {
       next[ability] = STANDARD_ARRAY[i];
@@ -203,14 +209,16 @@ export default function CharacterCreator({
       case 3:
         return cls !== null;
       case 4:
-        return background !== null;
+        return true;
       case 5:
-        return scores !== null;
+        return background !== null;
       case 6:
-        return !!cls && chosenSkills.length === cls.skillCount;
+        return scores !== null;
       case 7:
-        return weapon !== '' && armor !== '' && pack !== '';
+        return !!cls && chosenSkills.length === cls.skillCount;
       case 8:
+        return weapon !== '' && armor !== '' && pack !== '';
+      case 9:
         return personality !== '' && motivation !== '';
       default:
         return true;
@@ -218,55 +226,65 @@ export default function CharacterCreator({
   }
 
   async function handleCreate() {
-    if (!schemaOk || !cls || !species || !background || !scores || !name.trim()) return;
+    if (creatingRef.current || !schemaOk || !cls || !species || !background || !scores || !name.trim()) return;
+    creatingRef.current = true;
     setCreating(true);
     setError('');
-    const notes =
+    const notes = writeAppearance(
       `Trasfondo: ${background.name} · Así es: ${personality} · Busca: ${motivation} · ` +
-      `Se le da bien: ${allSkills.join(', ')} · Arma: ${weapon} · Armadura: ${armor}`;
-    const { data, error: insertError } = await supabase
-      .from('characters')
-      .insert({
-        world_id: worldId,
-        name: name.trim(),
-        species: species.name,
-        class_name: cls.name,
-        level: 1,
-        background: background.name,
-        personality,
-        motivation,
-        str: scores.FUE,
-        dex: scores.DES,
-        con: scores.CON,
-        int: scores.INT,
-        wis: scores.SAB,
-        cha: scores.CAR,
-        max_hp: maxHp,
-        hp: startHp,
-        ac,
-        weapon,
-        armor,
-        shield,
-        pack,
-        skills: allSkills,
-        notes,
-        status: 'vivo',
-        owner_name: playerName,
-      })
-      .select()
-      .single();
-    setCreating(false);
-    if (insertError) {
-      playSound('failure');
-      if (insertError.code === '23505') {
-        setError('Ese nombre ya lo usó un héroe (vivo o caído) y no se puede repetir. Elige otro nombre.');
-      } else {
-        setError(`No se pudo crear el personaje: ${insertError.message}`);
+      `Se le da bien: ${allSkills.join(', ')} · Arma: ${weapon} · Armadura: ${armor}`,
+      appearance,
+    );
+    try {
+      const { data, error: insertError } = await supabase
+        .from('characters')
+        .insert({
+          world_id: worldId,
+          name: name.trim(),
+          species: species.name,
+          class_name: cls.name,
+          level: 1,
+          background: background.name,
+          personality,
+          motivation,
+          str: scores.FUE,
+          dex: scores.DES,
+          con: scores.CON,
+          int: scores.INT,
+          wis: scores.SAB,
+          cha: scores.CAR,
+          max_hp: maxHp,
+          hp: startHp,
+          ac,
+          weapon,
+          armor,
+          shield,
+          pack,
+          skills: allSkills,
+          notes,
+          status: 'vivo',
+          owner_name: playerName,
+        })
+        .select()
+        .single();
+      if (insertError) {
+        playSound('failure');
+        if (insertError.code === '23505') {
+          setError('Ese nombre ya lo usó un héroe (vivo o caído) y no se puede repetir. Elige otro nombre.');
+        } else {
+          setError(`No se pudo crear el personaje: ${insertError.message}`);
+        }
+        return;
       }
-      return;
+      playSound('success');
+      onCreated(data as CharacterRow);
+    } catch (caught) {
+      playSound('failure');
+      setError(`No se pudo crear el personaje. ${caught instanceof Error ? caught.message : 'Revisa tu conexión e inténtalo de nuevo.'}`);
+    } finally {
+      creatingRef.current = false;
+      setCreating(false);
     }
-    playSound('success');
-    onCreated(data as CharacterRow);
   }
 
   return (
@@ -274,7 +292,7 @@ export default function CharacterCreator({
       <div>
         <h2>Crea tu héroe</h2>
         <p>
-          Paso {step} de 9: {STEP_TITLES[step - 1]}
+          Paso {step} de 10: {STEP_TITLES[step - 1]}
         </p>
         <button type="button" className="btn" onClick={onCancel}>
           ✕ Cancelar
@@ -309,7 +327,7 @@ export default function CharacterCreator({
 
       {step === 2 && (
         <div>
-          <h3>¿Qué es tu héroe?</h3>
+          <h3>Elige la raza de tu héroe</h3>
           <div className="grid-cards">
             {SPECIES.map((s) => (
               <button
@@ -355,6 +373,41 @@ export default function CharacterCreator({
       )}
 
       {step === 4 && (
+        <div className="creator-appearance-step">
+          <div>
+            <h3>Elige cómo se verá tu héroe</h3>
+            <p>Su rostro respeta los rasgos de {species?.name ?? 'su especie'} y su ropa refleja la profesión que elegiste.</p>
+            <fieldset className="appearance-choice-group">
+              <legend>Peinado</legend>
+              <div className="appearance-choice-row">
+                {HAIR_STYLES.map((style) => (
+                  <button type="button" key={style.id} className={`appearance-choice${appearance.hairStyle === style.id ? ' is-selected' : ''}`} aria-pressed={appearance.hairStyle === style.id} onClick={() => setAppearance((current) => ({ ...current, hairStyle: style.id }))}>
+                    <span className={`hair-swatch hair-${style.id}`} aria-hidden="true" />
+                    <span>{style.label}</span>
+                  </button>
+                ))}
+              </div>
+              {appearance.hairStyle !== 'bald' && <>
+                <p className="color-legend">Color del cabello</p>
+                <div className="appearance-choice-row">
+                  {HAIR_COLORS.map((color) => (
+                    <button type="button" key={color.id} className={`appearance-choice color-choice${appearance.hairColor === color.id ? ' is-selected' : ''}`} aria-pressed={appearance.hairColor === color.id} onClick={() => setAppearance((current) => ({ ...current, hairColor: color.id }))}>
+                      <span className={`color-swatch swatch-${color.id}`} aria-hidden="true" />
+                      <span>{color.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </>}
+            </fieldset>
+          </div>
+          {species && cls && <div className="creator-live-portrait">
+            <CharacterPortrait species={species.name} profession={cls.name} appearance={appearance} weapon={weapon || cls.defaultWeapon} armor={armor || cls.defaultArmor} shield={shield} pack={pack} name={name.trim() || 'Tu héroe'} />
+            <p>{species.name} · {cls.name}</p>
+          </div>}
+        </div>
+      )}
+
+      {step === 5 && (
         <div>
           <h3>¿De dónde viene tu héroe?</h3>
           <div className="grid-cards">
@@ -374,7 +427,7 @@ export default function CharacterCreator({
         </div>
       )}
 
-      {step === 5 && (
+      {step === 6 && (
         <div>
           <h3>¿Qué tan bueno es en cada cosa?</h3>
           <div>
@@ -428,7 +481,7 @@ export default function CharacterCreator({
         </div>
       )}
 
-      {step === 6 && (
+      {step === 7 && (
         <div>
           <h3>¿En qué es bueno tu héroe?</h3>
           {background && (
@@ -471,7 +524,7 @@ export default function CharacterCreator({
         </div>
       )}
 
-      {step === 7 && (
+      {step === 8 && (
         <div>
           <h3>¿Con qué pelea y se protege tu héroe?</h3>
           <h4>Arma</h4>
@@ -544,7 +597,7 @@ export default function CharacterCreator({
         </div>
       )}
 
-      {step === 8 && (
+      {step === 9 && (
         <div>
           <h3>Así es tu personaje</h3>
           <div>
@@ -575,7 +628,7 @@ export default function CharacterCreator({
         </div>
       )}
 
-      {step === 9 && cls && species && background && scores && (
+      {step === 10 && cls && species && background && scores && (
         <div>
           <h3>Tu héroe está listo</h3>
           <div className="card">
@@ -631,16 +684,16 @@ export default function CharacterCreator({
         </div>
       )}
 
-      <div>
+      <div className="creator-step-controls">
         <button type="button" className="btn" disabled={step === 1} onClick={() => setStep((s) => Math.max(1, s - 1))}>
           ← Atrás
         </button>
-        {step < 9 && (
+        {step < 10 && (
           <button
             type="button"
             className="btn btn-primary"
             disabled={!canNext()}
-            onClick={() => setStep((s) => Math.min(9, s + 1))}
+            onClick={() => setStep((s) => Math.min(10, s + 1))}
           >
             Siguiente →
           </button>
