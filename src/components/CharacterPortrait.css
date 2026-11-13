@@ -25,45 +25,55 @@
 }
 
 .portrait-costume {
-  z-index: 1;
+  /* The collar sits in front of the neck to hide the modular seam naturally. */
+  z-index: 3;
   width: 118%;
   aspect-ratio: 1;
   left: -9%;
-  top: 36%;
+  /* Raise the neckline so it sits snugly under the shorter portrait neck. */
+  top: 33%;
   filter: drop-shadow(0 10px 8px rgba(0,0,0,.28));
 }
 
 .portrait-head {
   z-index: 2;
-  width: 64%;
+  width: 58%;
   aspect-ratio: 1;
-  left: 18%;
+  left: 21%;
   top: -1%;
   filter: drop-shadow(0 6px 5px rgba(0,0,0,.2));
 }
 
 .portrait-hair {
-  z-index: 3;
-  width: 64%;
+  z-index: 4;
+  width: 58%;
   aspect-ratio: 1;
-  left: 18%;
+  left: 21%;
   top: -1%;
   pointer-events: none;
 }
 
-/* El hocico del dracónico y el pico aviar ocupan algo más de espacio en el atlas. */
-.portrait-species-draconico .portrait-head { width: 71%; left: 14.5%; top: 0; }
-.portrait-species-draconico .portrait-hair { width: 71%; left: 14.5%; top: 0; }
+/* Ajusta cada silueta al ancho de hombros del cuerpo sin perder sus rasgos. */
+.portrait-species-mediano .portrait-head,
+.portrait-species-mediano .portrait-hair,
+.portrait-species-firbolg .portrait-head,
+.portrait-species-firbolg .portrait-hair { width: 53%; left: 23.5%; }
+.portrait-species-gnomo .portrait-head,
+.portrait-species-gnomo .portrait-hair,
+.portrait-species-enano .portrait-head,
+.portrait-species-enano .portrait-hair { width: 55%; left: 22.5%; }
+.portrait-species-draconico .portrait-head,
+.portrait-species-draconico .portrait-hair { width: 60%; left: 20%; top: 0; }
 .portrait-species-aarakocra .portrait-head,
-.portrait-species-kenku .portrait-head { width: 69%; left: 15.5%; top: 0; }
+.portrait-species-kenku .portrait-head { width: 60%; left: 20%; top: 0; }
 .portrait-species-aarakocra .portrait-hair,
-.portrait-species-kenku .portrait-hair { width: 69%; left: 15.5%; top: 0; }
+.portrait-species-kenku .portrait-hair { width: 60%; left: 20%; top: 0; }
 .portrait-species-tabaxi .portrait-head,
-.portrait-species-minotauro .portrait-head { width: 67%; left: 16.5%; }
+.portrait-species-minotauro .portrait-head { width: 60%; left: 20%; }
 .portrait-species-tabaxi .portrait-hair,
-.portrait-species-minotauro .portrait-hair { width: 67%; left: 16.5%; }
-.portrait-species-hada .portrait-head { width: 57%; left: 21.5%; top: 2%; }
-.portrait-species-hada .portrait-hair { width: 57%; left: 21.5%; top: 2%; }
+.portrait-species-minotauro .portrait-hair { width: 60%; left: 20%; }
+.portrait-species-hada .portrait-head,
+.portrait-species-hada .portrait-hair { width: 54%; left: 23%; top: 2%; }
 
 .portrait-equipment-art {
   position: absolute;
