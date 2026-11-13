@@ -21,6 +21,7 @@ import { COMBAT_COLS, COMBAT_ROWS, moveCombatant } from '../lib/boardCombat';
 import { readAppearance } from '../lib/appearance';
 import { ABSENCE_GRACE_MS, absentCombatants, nextTurn as advanceTurn, playerKey, rejoin, withdraw } from '../lib/rearguard';
 import { useCombatActions } from '../hooks/useCombatActions';
+import { clearDeathSaves, readDeathSaves, resolveDeathSave, writeDeathSaves } from '../lib/deathSaves.ts';
 import {
   SKILLS,
   abilityMod,
@@ -120,12 +121,12 @@ export default function Play({ world, characters, schemaOk, playerName, onCharac
     setResultState({ message, sceneId: sharedScene?.id ?? null });
   }
   const [combat, setCombat] = useState<CombatRow | null>(null);
-  const [deathSaves, setDeathSaves] = useState<Record<string, { ok: number; fail: number }>>({});
   const [fallForm, setFallForm] = useState<string | null>(null);
   const [legacyKind, setLegacyKind] = useState<'tumba' | 'cancion' | 'leyenda' | 'objeto' | 'lugar'>('leyenda');
   const [legacyTitle, setLegacyTitle] = useState('');
   const [legacyBody, setLegacyBody] = useState('');
   const writeInProgress = useRef(false);
+  const deathSaveInProgress = useRef(new Set<string>());
 
   const living = useMemo(() => characters.filter((c) => c.status === 'vivo'), [characters]);
   const activeChar = useMemo(
@@ -385,62 +386,64 @@ export default function Play({ world, characters, schemaOk, playerName, onCharac
   }, [combat, presenceConnected, presentNames, ownerById]);
 
   async function deathSave(char: CharacterRow) {
-    if (char.status !== 'vivo' || char.hp > 0) return;
+    const saves = readDeathSaves(char.notes);
+    if (!schemaOk || char.status !== 'vivo' || char.hp > 0 || saves.successes >= 3 || saves.failures >= 3 || deathSaveInProgress.current.has(char.id)) return;
+    deathSaveInProgress.current.add(char.id);
     const d20 = rollDie(20);
-    const saves = deathSaves[char.id] ?? { ok: 0, fail: 0 };
-    let next = { ...saves };
-    let msg = '';
-    if (d20 === 20) {
-      next = { ok: 3, fail: 0 };
-      msg = `¡Un 20! ${char.name} se levanta con 1 punto de vida. ¡Está de vuelta!`;
-      if (schemaOk) {
-        const { error } = await supabase.from('characters').update({ hp: 1 }).eq('id', char.id).eq('status', 'vivo').eq('hp', 0).select('id').single();
-        if (error) {
-          setResult('La hoja cambió o no se pudo guardar la tirada. Revisa el estado del personaje antes de continuar.');
-          onCharactersChange();
-          return;
-        }
+    try {
+      const resolution = resolveDeathSave(saves, d20);
+      const nextNotes = resolution.recovered ? clearDeathSaves(char.notes) : writeDeathSaves(char.notes, resolution.saves);
+      let query = supabase.from('characters')
+        .update({ hp: resolution.recovered ? 1 : 0, notes: nextNotes })
+        .eq('id', char.id).eq('status', 'vivo').eq('hp', 0);
+      query = char.notes === null ? query.is('notes', null) : query.eq('notes', char.notes);
+      const { data, error } = await query.select('id').maybeSingle();
+      if (error || !data) {
+        setResult(error
+          ? 'No se pudo guardar la tirada. Revisa la conexión y el estado actual del personaje.'
+          : 'La hoja cambió en otra sesión. Se actualizó la compañía; revisa antes de volver a tirar.');
         onCharactersChange();
+        return;
       }
-    } else if (d20 === 1) {
-      next = { ...saves, fail: saves.fail + 2 };
-      msg = `Un 1… mala suerte: ${char.name} suma dos fallos. Lleva ${next.fail} de 3 fallos.`;
-    } else if (d20 >= 10) {
-      next = { ...saves, ok: saves.ok + 1 };
-      msg = `${char.name} saca ${d20}: un éxito. Lleva ${next.ok} de 3 éxitos.`;
-    } else {
-      next = { ...saves, fail: saves.fail + 1 };
-      msg = `${char.name} saca ${d20}: un fallo. Lleva ${next.fail} de 3 fallos.`;
-    }
-    setDeathSaves({ ...deathSaves, [char.id]: next });
-    setResult(msg);
-    await saveRoll({
-      world_id: world?.id ?? null,
-      player_name: playerName,
-      character_name: char.name,
-      label: `Tirada para no morir de ${char.name}`,
-      dice: '1d20',
-      result: d20,
-      detail: msg,
-    });
-    if (next.ok >= 3) {
-      setResult(`${msg} ¡Se estabiliza! ${char.name} no muere, pero sigue inconsciente hasta que alguien lo cure.`);
-    }
-    if (next.fail >= 3) {
-      setResult(`${char.name} ha caído. Registra su caída para que el mundo lo recuerde.`);
-      setFallForm(char.id);
+      const msg = resolution.recovered
+        ? `¡Un 20! ${char.name} se levanta con 1 punto de vida. ¡Está de vuelta!`
+        : d20 === 1
+          ? `Un 1… mala suerte: ${char.name} suma dos fallos. Lleva ${resolution.saves.failures} de 3 fallos.`
+          : d20 >= 10
+            ? `${char.name} saca ${d20}: un éxito. Lleva ${resolution.saves.successes} de 3 éxitos.`
+            : `${char.name} saca ${d20}: un fallo. Lleva ${resolution.saves.failures} de 3 fallos.`;
+      setResult(resolution.recovered
+        ? msg
+        : resolution.saves.successes >= 3
+          ? `${msg} ¡Se estabiliza! ${char.name} no muere, pero sigue inconsciente hasta que alguien lo cure.`
+          : resolution.saves.failures >= 3
+            ? `${char.name} ha acumulado tres fallos. Registra su caída para que el mundo lo recuerde.`
+            : msg);
+      if (resolution.saves.failures >= 3) setFallForm(char.id);
+      await saveRoll({
+        world_id: world?.id ?? null,
+        player_name: playerName,
+        character_name: char.name,
+        label: `Tirada para no morir de ${char.name}`,
+        dice: '1d20',
+        result: d20,
+        detail: msg,
+      });
+      onCharactersChange();
+    } finally {
+      deathSaveInProgress.current.delete(char.id);
     }
   }
 
   async function registerFall(char: CharacterRow) {
     if (!schemaOk) return;
-    const { error } = await supabase
+    let query = supabase
       .from('characters')
-      .update({ status: 'caido', hp: 0, death_note: `Cayó en ${adventure?.name ?? 'el mundo'}.` })
-      .eq('id', char.id).eq('status', 'vivo')
-      .select('id')
-      .single();
-    if (error) {
+      .update({ status: 'caido', hp: 0, death_note: `Cayó en ${adventure?.name ?? 'el mundo'}.`, notes: clearDeathSaves(char.notes) })
+      .eq('id', char.id).eq('status', 'vivo').eq('hp', 0);
+    query = char.notes === null ? query.is('notes', null) : query.eq('notes', char.notes);
+    const { data, error } = await query.select('id').maybeSingle();
+    if (error || !data) {
       setResult('No se pudo registrar la caída. Inténtalo de nuevo.');
       playSound('failure');
       return;
@@ -683,12 +686,16 @@ export default function Play({ world, characters, schemaOk, playerName, onCharac
 
       {/* Personajes a 0 de vida: tirada para no morir */}
       {dying.map((c) => {
-        const saves = deathSaves[c.id] ?? { ok: 0, fail: 0 };
+        const saves = readDeathSaves(c.notes);
+        const terminal = saves.successes >= 3 || saves.failures >= 3;
+        const saving = deathSaveInProgress.current.has(c.id);
         return (
           <div key={c.id} className="card danger-card">
             <h3>{c.name} está a 0 de vida</h3>
-            <p>Éxitos: {saves.ok}/3 · Fallos: {saves.fail}/3. Saca 10 o más para un éxito. Un 20 te levanta con 1 de vida. Un 1 son dos fallos.</p>
-            <button className="btn btn-danger" onClick={() => deathSave(c)}>Tirar para no morir</button>
+            <p>Éxitos: {saves.successes}/3 · Fallos: {saves.failures}/3. Saca 10 o más para un éxito. Un 20 te levanta con 1 de vida. Un 1 son dos fallos.</p>
+            <button className="btn btn-danger" disabled={!schemaOk || terminal || saving} onClick={() => void deathSave(c)}>
+              {saving ? 'Guardando tirada…' : saves.successes >= 3 ? 'Estable; espera curación' : saves.failures >= 3 ? 'Registra la caída' : 'Tirar para no morir'}
+            </button>
           </div>
         );
       })}

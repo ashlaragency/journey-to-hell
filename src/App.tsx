@@ -18,6 +18,7 @@ import WorldActivity from './components/WorldActivity';
 import CombatEffects from './components/CombatEffects';
 import CharacterPortrait from './components/CharacterPortrait';
 import { readAppearance } from './lib/appearance';
+import { clearDeathSaves } from './lib/deathSaves.ts';
 import { useSession } from './hooks/useSession';
 import { useTablePresence } from './hooks/useTablePresence';
 import './LivingShell.css';
@@ -97,8 +98,11 @@ export default function App() {
     const next = Math.max(0, Math.min(c.max_hp, c.hp + delta));
     if (!schemaOk) return;
     if (c.status !== 'vivo') return;
-    const { error } = await supabase.from('characters').update({ hp: next }).eq('id', c.id).eq('status', 'vivo').eq('hp', c.hp).select('id').single();
-    if (error) {
+    let query = supabase.from('characters').update(next > 0 ? { hp: next, notes: clearDeathSaves(c.notes) } : { hp: next })
+      .eq('id', c.id).eq('status', 'vivo').eq('hp', c.hp);
+    if (next > 0) query = c.notes === null ? query.is('notes', null) : query.eq('notes', c.notes);
+    const { data, error } = await query.select('id').maybeSingle();
+    if (error || !data) {
       setHpFlash('No se pudo guardar la vida. Actualiza la hoja e inténtalo de nuevo.');
       void fetchAll();
       return;

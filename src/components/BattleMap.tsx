@@ -8,6 +8,7 @@ import './BattleMap.css';
 import MonsterPortrait from './MonsterPortrait';
 import CharacterPortrait from './CharacterPortrait';
 import { readAppearance } from '../lib/appearance';
+import { clearDeathSaves } from '../lib/deathSaves.ts';
 import {
   supabase,
   type CharacterRow,
@@ -243,10 +244,12 @@ export default function BattleMap({ worldId, characters, schemaOk, playerName, o
         setNotice('Recupera la conexión antes de cambiar la vida de un personaje.');
         return;
       }
-      const { error } = await supabase.from('characters').update({ hp: newHp })
+      let query = supabase.from('characters').update(newHp > 0 ? { hp: newHp, notes: clearDeathSaves(character.notes) } : { hp: newHp })
         .eq('id', characterId).eq('world_id', worldId).eq('status', 'vivo')
-        .eq('hp', character.hp).select('id').single();
-      if (error) {
+        .eq('hp', character.hp);
+      if (newHp > 0) query = character.notes === null ? query.is('notes', null) : query.eq('notes', character.notes);
+      const { data, error } = await query.select('id').maybeSingle();
+      if (error || !data) {
         setNotice('No se pudo guardar la vida. Revisa la hoja actualizada antes de intentarlo de nuevo.');
         return;
       }
