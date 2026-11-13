@@ -30,10 +30,21 @@
   width: 118%;
   aspect-ratio: 1;
   left: -9%;
+  transform: scaleX(var(--portrait-body-scale, 1));
+  transform-origin: center top;
   /* Raise the neckline so it sits snugly under the shorter portrait neck. */
   top: 33%;
   filter: drop-shadow(0 10px 8px rgba(0,0,0,.28));
 }
+
+/* Give sturdy races enough shoulder width to balance their broader heads. */
+.portrait-species-enano { --portrait-body-scale: 1.08; }
+.portrait-species-semiorco { --portrait-body-scale: 1.08; }
+.portrait-species-draconico { --portrait-body-scale: 1.06; }
+.portrait-species-firbolg { --portrait-body-scale: 1.1; }
+.portrait-species-goliat { --portrait-body-scale: 1.12; }
+.portrait-species-tortle { --portrait-body-scale: 1.08; }
+.portrait-species-minotauro { --portrait-body-scale: 1.1; }
 
 .portrait-head {
   z-index: 2;
