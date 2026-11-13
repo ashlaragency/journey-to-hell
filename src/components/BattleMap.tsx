@@ -318,7 +318,8 @@ export default function BattleMap({ worldId, characters, schemaOk, playerName, o
         <CombatBoard combat={combat} characters={characters} art={atlasMap ? urlMapa(atlasMap) : undefined} busy={moving || actions.pending}
           onMove={(refId, x, y) => void moveInCombat(refId, x, y)}
           onAttack={(attackerRefId, targetRefId) => void actions.runAction(() => actions.pcAttack(targetRefId, attackerRefId))}
-          onEnemyAttack={(enemyRefId) => void actions.runAction(() => actions.enemyAttack(enemyRefId))} />
+          onEnemyAttack={(enemyRefId) => void actions.runAction(() => actions.enemyAttack(enemyRefId))}
+          onPassTurn={() => void actions.runAction(actions.nextTurn)} />
       </>}
 
       <div className="battle-tools">

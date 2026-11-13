@@ -18,11 +18,12 @@ interface CombatBoardProps {
   onMove?: (refId: string, x: number, y: number) => void;
   onAttack?: (attackerRefId: string, targetRefId: string) => void;
   onEnemyAttack?: (enemyRefId: string) => void;
+  onPassTurn?: () => void;
 }
 
 const HERO_COLORS = ['#7b1fa2', '#1565c0', '#2e7d32', '#ef6c00', '#00838f', '#c62828'];
 
-export default function CombatBoard({ combat, characters, art, busy = false, onMove, onAttack, onEnemyAttack }: CombatBoardProps) {
+export default function CombatBoard({ combat, characters, art, busy = false, onMove, onAttack, onEnemyAttack, onPassTurn }: CombatBoardProps) {
   const pieces = useMemo(() => layoutCombat(combat.combatants, combat.turn_index, COMBAT_COLS, COMBAT_ROWS), [combat.combatants, combat.turn_index]);
   const [selected, setSelected] = useState<string | null>(null);
   const picked = pieces.find((piece) => piece.refId === selected && !piece.away) ?? null;
@@ -85,6 +86,7 @@ export default function CombatBoard({ combat, characters, art, busy = false, onM
       <div className="battle-board-caption">
         <span>{actingHeroSelected ? 'Toca una criatura resaltada para atacarla, o una casilla libre para moverte.' : picked ? `Elige una casilla libre para mover a ${picked.name}.` : onMove ? 'Toca una ficha y después su destino.' : 'La mesa ve la pelea en directo.'}</span>
         {turn?.kind === 'enemy' && onEnemyAttack && <button className="btn btn-danger" disabled={busy} onClick={() => onEnemyAttack(turn.refId)}>Que ataque {turn.name}</button>}
+        {onPassTurn && (turn?.kind === 'enemy' || (turn?.kind === 'pc' && (turn.down || turn.away))) && <button className="btn btn-primary" disabled={busy} onClick={onPassTurn}>Pasar turno →</button>}
         <span>La columna izquierda es la retaguardia</span>
       </div>
     </section>
