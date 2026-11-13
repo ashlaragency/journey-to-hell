@@ -1,5 +1,6 @@
 // Bandeja de dados para "Journey to Hell": tira dados, anima el resultado,
 // lo guarda en Supabase y muestra las últimas tiradas del mundo en vivo.
+import { playSound } from '../lib/audio';
 import { useEffect, useRef, useState } from 'react';
 import { supabase, saveRoll, parseAndRoll, type CharacterRow } from '../lib/supabase';
 
@@ -122,6 +123,7 @@ export default function DiceTray({ worldId, playerName, characterName }: DiceTra
 
   function handleRoll() {
     if (rolling) return;
+    playSound('dice');
     stopAnimationTimers();
     setRolling(true);
     setFaces(null);
@@ -192,131 +194,96 @@ export default function DiceTray({ worldId, playerName, characterName }: DiceTra
   }
 
   return (
-    <div className="dice-tray">
-      <h2>🎲 Bandeja de dados</h2>
-      {heroName && <p>Tirando como {heroName}</p>}
+    <section className="dice-tray card" aria-labelledby="dice-title">
+      <h2 id="dice-title">Mesa de dados</h2>
+      {heroName && <p className="hint">Tirando como {heroName}</p>}
 
-      <div>
-        <h3>Dado</h3>
+      <div className={`die-display${rolling ? ' dice-rolling' : ''}`} aria-hidden="true">
+        <span>{display ?? `d${sides}`}</span>
+      </div>
+      <p className="dice-result-detail" role="status">
+        {rolling ? 'Rodando…' : result !== null ? `Resultado ${result}. ${detail}` : 'Elige un dado y tira.'}
+      </p>
+      {!rolling && faces && <p className="hint dice-faces-detail">Caras {faces.join(', ')}</p>}
+
+      <div className="dice-types" role="group" aria-label="Tipo de dado">
+        {DICE_SIDES.map((d) => (
+          <button
+            type="button"
+            key={d}
+            className={`chip${sides === d ? ' chip-selected' : ''}`}
+            aria-pressed={sides === d}
+            onClick={() => setSides(d)}
+          >
+            d{d}
+          </button>
+        ))}
+      </div>
+
+      <div className="dice-adjustments">
         <div>
-          {DICE_SIDES.map((d) => (
-            <button
-              type="button"
-              key={d}
-              className={`chip${sides === d ? ' chip-selected' : ''}`}
-              onClick={() => setSides(d)}
-            >
-              d{d}
-            </button>
-          ))}
+          <h3>Cantidad</h3>
+          <div className="dice-stepper">
+            <button type="button" className="btn" aria-label="Quitar un dado" disabled={count <= 1} onClick={() => setCount((c) => Math.max(1, c - 1))}>−</button>
+            <span>{count}d{sides}</span>
+            <button type="button" className="btn" aria-label="Añadir un dado" disabled={count >= 5} onClick={() => setCount((c) => Math.min(5, c + 1))}>+</button>
+          </div>
+        </div>
+        <div>
+          <h3>Modificador</h3>
+          <div className="dice-stepper">
+            <button type="button" className="btn" aria-label="Reducir modificador" disabled={modifier <= -5} onClick={() => setModifier((m) => Math.max(-5, m - 1))}>−</button>
+            <span>{fmtSigned(modifier)}</span>
+            <button type="button" className="btn" aria-label="Aumentar modificador" disabled={modifier >= 10} onClick={() => setModifier((m) => Math.min(10, m + 1))}>+</button>
+          </div>
         </div>
       </div>
 
-      <div>
-        <h3>Cantidad</h3>
-        <div>
-          <button type="button" className="btn" disabled={count <= 1} onClick={() => setCount((c) => Math.max(1, c - 1))}>
-            −
+      <div className="dice-modes" role="group" aria-label="Suerte de la tirada">
+        {(['normal', 'ventaja', 'desventaja'] as const).map((value) => (
+          <button
+            key={value}
+            type="button"
+            className={`btn${mode === value ? ' btn-primary' : ''}`}
+            aria-pressed={mode === value}
+            onClick={() => setMode(value)}
+          >
+            {value === 'normal' ? 'Normal' : value === 'ventaja' ? 'Ventaja' : 'Desventaja'}
           </button>
-          <span>
-            {count}d{sides}
-          </span>
-          <button type="button" className="btn" disabled={count >= 5} onClick={() => setCount((c) => Math.min(5, c + 1))}>
-            +
-          </button>
-        </div>
+        ))}
       </div>
-
-      <div>
-        <h3>Modificador</h3>
-        <div>
-          <button
-            type="button"
-            className="btn"
-            disabled={modifier <= -5}
-            onClick={() => setModifier((m) => Math.max(-5, m - 1))}
-          >
-            −
-          </button>
-          <span>{fmtSigned(modifier)}</span>
-          <button
-            type="button"
-            className="btn"
-            disabled={modifier >= 10}
-            onClick={() => setModifier((m) => Math.min(10, m + 1))}
-          >
-            +
-          </button>
-        </div>
-      </div>
-
-      <div>
-        <h3>Suerte</h3>
-        <div>
-          <button
-            type="button"
-            className={`btn${mode === 'ventaja' ? ' btn-primary' : ''}`}
-            onClick={() => setMode('ventaja')}
-          >
-            Ventaja
-          </button>
-          <button
-            type="button"
-            className={`btn${mode === 'normal' ? ' btn-primary' : ''}`}
-            onClick={() => setMode('normal')}
-          >
-            Normal
-          </button>
-          <button
-            type="button"
-            className={`btn${mode === 'desventaja' ? ' btn-primary' : ''}`}
-            onClick={() => setMode('desventaja')}
-          >
-            Desventaja
-          </button>
-        </div>
-        {mode !== 'normal' && sides !== 20 && (
-          <p>La ventaja y la desventaja solo afectan al d20: con este dado se tira normal.</p>
-        )}
-        {mode !== 'normal' && sides === 20 && (
-          <p>
-            {mode === 'ventaja' ? 'Se tiran 2d20 y se queda el mayor.' : 'Se tiran 2d20 y se queda el menor.'}
-          </p>
-        )}
-      </div>
-
-      <button type="button" className="btn btn-primary" disabled={rolling} onClick={handleRoll}>
-        🎲 Tirar
-      </button>
-
-      {display !== null && (
-        <div>
-          <p className={rolling ? 'dice-rolling' : ''}>{display}</p>
-          {!rolling && faces && (
-            <p>
-              Caras: {faces.join(', ')}
-              {result !== null && detail ? ` · ${detail}` : ''}
-            </p>
-          )}
-          {rolling && <p>Rodando…</p>}
-        </div>
+      {mode !== 'normal' && (
+        <p className="hint">
+          {sides !== 20
+            ? 'La ventaja y la desventaja solo afectan al d20. Este dado se tira normal.'
+            : mode === 'ventaja'
+              ? 'Se tiran 2d20 y se queda el mayor.'
+              : 'Se tiran 2d20 y se queda el menor.'}
+        </p>
       )}
 
-      <div>
+      <button type="button" className="btn btn-primary roll-button" disabled={rolling} onClick={handleRoll}>
+        {rolling ? 'Tirando…' : `Tirar ${hasAdvantage ? '2d20' : `${count}d${sides}`}`}
+      </button>
+
+      <div className="roll-history">
         <h3>Últimas tiradas</h3>
-        {!worldId && <p>Elige un mundo para ver las tiradas de todos.</p>}
-        {worldId && rolls.length === 0 && <p>Todavía no hay tiradas en este mundo. ¡Sé la primera persona en tirar!</p>}
-        <ul>
+        {!worldId && <p className="hint">Conecta con el mundo para ver las tiradas de todos.</p>}
+        {worldId && rolls.length === 0 && <p className="hint">Todavía no hay tiradas en este mundo.</p>}
+        <ul tabIndex={0} aria-label="Historial de tiradas">
           {rolls.map((r) => (
             <li key={r.id}>
-              <strong>{r.player_name ?? 'Alguien'}</strong>
-              {r.character_name ? ` (${r.character_name})` : ''} · {r.label} ({r.dice}) →{' '}
-              <strong>{r.result}</strong>
-              {r.detail ? ` · ${r.detail}` : ''}
+              <div className="roll-history-copy">
+                <strong>{r.player_name || 'Alguien'}</strong>
+                {r.character_name && <span>{r.character_name}</span>}
+                <span>{r.label} ({r.dice})</span>
+                {r.detail && <small>{r.detail}</small>}
+              </div>
+              <b className="roll-total" aria-label={`Resultado ${r.result}`}>{r.result}</b>
             </li>
           ))}
         </ul>
       </div>
-    </div>
+    </section>
   );
 }

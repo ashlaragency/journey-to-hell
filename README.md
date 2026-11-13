@@ -20,7 +20,7 @@ puede aplicar desde aquí**. Pasos:
 1. Abre el panel de Supabase del proyecto **dnd-mundo-vivo**
    (https://supabase.com/dashboard/project/lewyzkdhwrdiiorwsfgh).
 2. Ve a **SQL Editor → New query**.
-3. Pega TODO el contenido de `../schema.sql` y pulsa **Run**.
+3. Pega TODO el contenido de `schema.sql` y pulsa **Run**.
 4. Comprueba con:
    - `select count(*) from public.worlds;` → 1
    - `select count(*) from public.adventures;` → 9
@@ -43,15 +43,15 @@ locales (solo lectura, sin sincronización).
 ## 2. Desarrollo local
 
 ```bash
-cd app
 npm install
 npm run dev      # http://localhost:5173
 npm run build    # compila a dist/
 ```
 
-Las variables `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY` ya están en
-`.env` (clave anon pública, diseñada para ir en el cliente). En Vercel las
-pone la integración de Supabase.
+La app usa el proyecto `dnd-mundo-vivo` y una clave anon pública. Para otro
+entorno local puedes definir `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY` en
+un archivo `.env` local; no subas ese archivo ni uses una clave `service_role`
+o una contraseña de base de datos.
 
 ## 3. Desplegar en Vercel
 
@@ -59,19 +59,9 @@ Opción A (recomendada): conectar el repositorio de GitHub al proyecto
 `journey-to-hell` en Vercel (Add New → Project → Import Git Repository).
 Cada push a la rama principal despliega solo.
 
-Opción B: con Vercel CLI (`vercel login` con la cuenta pedro@ashlaragency.com
-y `vercel --prod` dentro de `app/`).
-
-**Falta para desplegar:** el código aún no está en GitHub (`gh` no está
-autenticado en esta máquina). Hay que crear el repositorio `journey-to-hell`
-y subir el código:
-
-```bash
-cd app
-gh repo create journey-to-hell --public --source=. --remote=origin --push
-```
-
-(o crear el repo a mano en github.com y hacer `git push`).
+Opción B: con Vercel CLI, ejecuta `vercel` desde la raíz del repositorio y
+elige el proyecto `journey-to-hell` ya enlazado. Comprueba la vista previa
+antes de promover una versión a producción.
 
 ## Qué tiene la app
 
@@ -98,20 +88,33 @@ gh repo create journey-to-hell --public --source=. --remote=origin --push
   y crónica se ven en todos los dispositivos a la vez. Sin cuentas ni login:
   cada jugador se identifica por su nombre de jugador.
 
+## Combate en el tablero y retaguardia
+
+En Aventura o en Mesa, selecciona al héroe que tiene el turno y toca una
+criatura resaltada para atacar. En el turno de una criatura, usa **Que ataque**
+junto al tablero. Un ataque guardado avanza la iniciativa en la misma escritura;
+el efecto visual y el sonido se comparten con la mesa en vivo. Los botones de
+ataque de la lista siguen disponibles.
+
+Si un jugador pierde conexión, su héroe se repliega a la retaguardia tras 90
+segundos y deja de ser un objetivo. El Infernalista también puede replegarlo o
+devolverlo al frente desde la iniciativa. Las tiradas para no morir se guardan
+en la ficha y permanecen al recargar o abrir otra pestaña.
+
 ## Estructura
 
 ```
-../schema.sql        Migración SQL (aplicar a mano en Supabase)
-app/
-  src/lib/data.ts        Catálogos del creador (especies, clases, equipo…)
-  src/lib/compendium.ts  Compendio SRD y las 9 aventuras (respaldo local)
-  src/lib/supabase.ts    Cliente Supabase + tipos + dados
-  src/components/Play.tsx            Jugar (recorrido + combate)
-  src/components/CharacterCreator.tsx
-  src/components/DiceTray.tsx
-  src/components/BattleMap.tsx
-  src/components/Compendium.tsx
-  src/components/WorldPanel.tsx
-  src/App.tsx            Pestañas, estado global, Realtime
-  src/index.css          Tema oscuro de taberna/pergamino
+schema.sql                 Migración SQL (aplicar a mano en Supabase)
+src/lib/data.ts            Catálogos del creador (especies, clases, equipo…)
+src/lib/compendium.ts      Compendio y las 9 aventuras (respaldo local)
+src/lib/supabase.ts        Cliente Supabase + tipos + dados
+src/components/Play.tsx    Aventura y combate
+src/components/CombatBoard.tsx
+src/components/CharacterCreator.tsx
+src/components/DiceTray.tsx
+src/components/BattleMap.tsx
+src/components/Compendium.tsx
+src/components/WorldPanel.tsx
+src/App.tsx                Pestañas, estado global, Realtime
+tests/                     Pruebas de reglas y marcadores persistentes
 ```
