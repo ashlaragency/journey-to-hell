@@ -4,6 +4,7 @@ import { SCENE_EVENT_TITLE, type SceneCuePayload } from '../lib/session';
 import { useSession } from '../hooks/useSession';
 import { playSound } from '../lib/audio';
 import { abilityMod, rollDie } from '../lib/data';
+import { nextTurn } from '../lib/rearguard';
 import MonsterPortrait from './MonsterPortrait';
 import CharacterPortrait from './CharacterPortrait';
 import { readAppearance } from '../lib/appearance';
@@ -170,13 +171,10 @@ export default function Infernalista({ world, characters, schemaOk, playerName, 
 
   async function changeTurn(finish = false) {
     if (!combat || combatError || !combat.combatants.length) return;
-    const count = combat.combatants.length;
-    let nextIndex = (combat.turn_index + 1) % count;
-    let round = combat.round + (nextIndex === 0 ? 1 : 0);
-    for (let attempts = 0; attempts < count - 1 && combat.combatants[nextIndex].hp <= 0; attempts++) {
-      nextIndex = (nextIndex + 1) % count;
-      if (nextIndex === 0) round++;
-    }
+    // Salta a los caídos y a quienes esperan en la retaguardia.
+    const turn = nextTurn(combat.combatants, combat.turn_index, combat.round);
+    const nextIndex = turn?.turn_index ?? combat.turn_index;
+    const round = turn?.round ?? combat.round;
     await perform('turno', async () => {
       const previousUpdate = Date.parse(combat.updated_at);
       const updatedAt = new Date(Math.max(Date.now(), Number.isFinite(previousUpdate) ? previousUpdate + 1 : 0)).toISOString();
@@ -268,7 +266,7 @@ export default function Infernalista({ world, characters, schemaOk, playerName, 
             <div className="infernal-turn"><span>RONDA {combat.round}</span><p>Actúa <strong>{turn?.name ?? 'la compañía'}</strong></p></div>
             <ol className="infernal-initiative">{combat.combatants.map((fighter, index) => {
               const character = fighter.kind === 'pc' ? characters.find((item) => item.id === fighter.ref_id) : undefined;
-              return <li key={fighter.ref_id} className={`${index === combat.turn_index % combat.combatants.length ? 'is-current' : ''} ${fighter.hp <= 0 ? 'is-down' : ''}`} aria-current={index === combat.turn_index % combat.combatants.length ? 'step' : undefined}><span className="infernal-initiative-value">{fighter.initiative}</span>{fighter.kind === 'enemy' ? <MonsterPortrait name={fighter.name} /> : character ? <CharacterPortrait species={character.species} profession={character.class_name} appearance={readAppearance(character.notes)} name={character.name} compact decorative className="character-avatar infernal-initiative-character" /> : <span className="character-avatar" aria-hidden="true">{fighter.name.slice(0, 1)}</span>}<strong>{fighter.name}</strong><span>{Math.max(0, fighter.hp)}<small>/{fighter.max_hp} vida</small></span></li>;
+              return <li key={fighter.ref_id} className={`${index === combat.turn_index % combat.combatants.length ? 'is-current' : ''} ${fighter.hp <= 0 || fighter.away ? 'is-down' : ''}`} aria-current={index === combat.turn_index % combat.combatants.length ? 'step' : undefined}><span className="infernal-initiative-value">{fighter.initiative}</span>{fighter.kind === 'enemy' ? <MonsterPortrait name={fighter.name} /> : character ? <CharacterPortrait species={character.species} profession={character.class_name} appearance={readAppearance(character.notes)} name={character.name} compact decorative className="character-avatar infernal-initiative-character" /> : <span className="character-avatar" aria-hidden="true">{fighter.name.slice(0, 1)}</span>}<strong>{fighter.name}{fighter.away && <em className="away-tag">En la retaguardia</em>}</strong><span>{Math.max(0, fighter.hp)}<small>/{fighter.max_hp} vida</small></span></li>;
             })}</ol>
             <div className="infernal-publish-row"><button className="btn btn-primary" disabled={!available || !!combatError || !combat.combatants.some((fighter) => fighter.hp > 0)} onClick={() => void changeTurn()}>Siguiente turno →</button><button className="btn" onClick={onOpenPlay}>Resolver acciones</button></div>
             {!confirmEnd ? <button className="infernal-text-button" disabled={!available || !!combatError} onClick={() => setConfirmEnd(true)}>Cerrar encuentro</button> : <div className="infernal-confirm"><p>El encuentro terminará para toda la mesa. La vida de los personajes se conserva.</p><button className="btn btn-danger" disabled={!available || !!combatError} onClick={() => void changeTurn(true)}>Confirmar cierre</button><button className="btn" disabled={!!pending} onClick={() => setConfirmEnd(false)}>Seguir jugando</button></div>}

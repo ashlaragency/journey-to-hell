@@ -1,5 +1,5 @@
 // Journey to Hell — app multijugador (Supabase Realtime, clave anon).
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import {
   supabase,
   checkSchema,
@@ -56,6 +56,7 @@ export default function App() {
   const [mapaAtlas, setMapaAtlas] = useState<MapaAtlas | null>(null);
   const session = useSession(world?.id, schemaOk);
   const presence = useTablePresence(world?.id, schemaOk, playerName, role);
+  const presentNames = useMemo(() => presence.members.map((member) => member.name), [presence.members]);
   const sharedScene = session.cue?.payload.active ? { id: session.cue.id, ...session.cue.payload } : null;
   useEffect(() => {
     const onVisibility = () => setPageHidden(document.hidden);
@@ -215,6 +216,8 @@ export default function App() {
               playerName={playerName}
               onCharactersChange={fetchAll}
               sharedScene={sharedScene}
+              presentNames={presentNames}
+              presenceConnected={presence.connected}
               onCreateCharacter={openCreator}
               onOpenMap={() => navigate('mapa')}
             />
@@ -340,6 +343,7 @@ export default function App() {
               characters={characters}
               schemaOk={schemaOk}
               mapaInicial={mapaAtlas}
+              onOpenPlay={() => navigate('jugar')}
             />
           )}
 

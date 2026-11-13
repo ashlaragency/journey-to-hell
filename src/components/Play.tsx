@@ -17,7 +17,10 @@ import {
 import { ADVENTURES_SEED } from '../lib/compendium';
 import MonsterPortrait from './MonsterPortrait';
 import CharacterPortrait from './CharacterPortrait';
+import CombatBoard from './CombatBoard';
+import { COMBAT_COLS, COMBAT_ROWS, moveCombatant } from '../lib/boardCombat';
 import { readAppearance } from '../lib/appearance';
+import { ABSENCE_GRACE_MS, absentCombatants, battleOutcome, enemyTargets, nextTurn as advanceTurn, playerKey, rejoin, withdraw } from '../lib/rearguard';
 import {
   SKILLS,
   WEAPONS,
@@ -34,6 +37,9 @@ interface PlayProps {
   onCharactersChange: () => void;
   onCreateCharacter?: () => void;
   onOpenMap?: () => void;
+  /** Nombres de los jugadores conectados ahora mismo a la mesa. */
+  presentNames?: string[];
+  presenceConnected?: boolean;
   sharedScene?: { id: string; adventureId: string; sceneIndex: number; place: string; narration: string; director: string } | null;
 }
 
@@ -52,6 +58,7 @@ interface Adv {
 }
 
 const DC_EXPLORAR = 12;
+const NOBODY: string[] = [];
 
 const EXPLORATION_ACTIONS = [
   { skill: 'Percepción', label: 'Mirar', title: 'Mirar a mi alrededor', detail: 'Observa lo que otros pasan por alto.', icon: 'eye' },
@@ -102,7 +109,7 @@ function skillMod(c: CharacterRow, skillName: string): number {
   return base + prof;
 }
 
-export default function Play({ world, characters, schemaOk, playerName, onCharactersChange, onCreateCharacter, onOpenMap, sharedScene }: PlayProps) {
+export default function Play({ world, characters, schemaOk, playerName, onCharactersChange, onCreateCharacter, onOpenMap, sharedScene, presentNames = NOBODY, presenceConnected = false }: PlayProps) {
   const [adventures, setAdventures] = useState<Adv[]>(ADVENTURES_SEED.map((a, i) => ({ ...a, id: `seed-${i}` })));
   const [adventureError, setAdventureError] = useState<string | null>(null);
   const [advId, setAdvId] = useState<string>(() => localStorage.getItem('jth_adv') ?? '');
@@ -128,6 +135,26 @@ export default function Play({ world, characters, schemaOk, playerName, onCharac
     [living, charId],
   );
   const characterById = useMemo(() => new Map(characters.map((character) => [character.id, character])), [characters]);
+  const ownerById = useMemo(() => new Map(characters.map((character) => [character.id, character.owner_name])), [characters]);
+  // Desde cuándo falta cada jugador. Solo se confía en la lista mientras esta
+  // pestaña sigue conectada: sin conexión no sabemos quién está y quién no.
+  const absentSince = useRef(new Map<string, number>());
+  useEffect(() => {
+    if (!presenceConnected) { absentSince.current.clear(); return; }
+    const present = new Set(presentNames.map(playerKey));
+    const now = Date.now();
+    for (const owner of new Set(characters.map((character) => playerKey(character.owner_name)))) {
+      if (!owner || present.has(owner)) absentSince.current.delete(owner);
+      else if (!absentSince.current.has(owner)) absentSince.current.set(owner, now);
+    }
+  }, [presentNames, presenceConnected, characters]);
+  function overdueAbsences(combatants: Combatant[]): string[] {
+    if (!presenceConnected) return [];
+    const now = Date.now();
+    return absentCombatants(combatants, ownerById, presentNames)
+      .filter(({ owner }) => now - (absentSince.current.get(owner) ?? now) >= ABSENCE_GRACE_MS)
+      .map(({ refId }) => refId);
+  }
   const selectedAdventureId = sharedScene?.adventureId ?? advId;
   const adventure = useMemo(
     () => adventures.find((a) => a.id === selectedAdventureId) ?? (sharedScene ? null : adventures[0]) ?? null,
@@ -227,7 +254,7 @@ export default function Play({ world, characters, schemaOk, playerName, onCharac
     }
   }
 
-  async function persistCombat(next: CombatRow, attackEvent?: CombatAttackEvent, attackerRefId?: string): Promise<boolean> {
+  async function persistCombat(next: CombatRow, attackEvent?: CombatAttackEvent, attackerRefId?: string, silent = false): Promise<boolean> {
     if (!schemaOk || !world) {
       setResult('Necesitas conexión con el mundo para guardar el combate.');
       return false;
@@ -263,11 +290,13 @@ export default function Play({ world, characters, schemaOk, playerName, onCharac
     if (!error && !data) {
       const { data: current } = await supabase.from('combat').select('*').eq('id', next.id).eq('world_id', world.id).maybeSingle();
       if (current) setCombat(current as CombatRow);
+      if (silent) return false;
       setResult('La mesa cambió mientras actuabas. Revisa el turno actualizado y vuelve a elegir tu acción.');
       playSound('failure');
       return false;
     }
     if (error || !data) {
+      if (silent) return false;
       setResult('No se pudo guardar la acción del combate. Inténtalo de nuevo.');
       playSound('failure');
       return false;
@@ -324,15 +353,22 @@ export default function Play({ world, characters, schemaOk, playerName, onCharac
         ac: e.ac,
       })),
     ].sort((a, b) => b.initiative - a.initiative);
+    // Quien lleva un rato fuera de la mesa empieza a salvo en la retaguardia,
+    // siempre que quede alguien en el frente para pelear.
+    const overdue = new Set(overdueAbsences(combatants));
+    const waiting = combatants.filter((item) => overdue.has(item.ref_id));
+    const startsAway = waiting.length > 0 && combatants.some((item) => item.kind === 'pc' && item.hp > 0 && !overdue.has(item.ref_id));
+    if (startsAway) for (const item of waiting) item.away = true;
+    const first = startsAway && combatants[0].away ? advanceTurn(combatants, 0, 1)?.turn_index ?? 0 : 0;
     const row: CombatRow = {
       id: crypto.randomUUID(),
       world_id: world?.id ?? null,
       adventure_id: adventure.id.startsWith('seed-') ? null : adventure.id,
       active: true,
       round: 1,
-      turn_index: 0,
+      turn_index: first,
       combatants,
-      log: [`¡Empieza la pelea en ${adventure.name}!`],
+      log: [`¡Empieza la pelea en ${adventure.name}!`, ...(startsAway ? [`${waiting.map((item) => item.name).join(', ')} espera en la retaguardia hasta que su jugador vuelva.`] : [])],
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
@@ -344,7 +380,7 @@ export default function Play({ world, characters, schemaOk, playerName, onCharac
         adventure_id: row.adventure_id,
         active: true,
         round: 1,
-        turn_index: 0,
+        turn_index: first,
         combatants,
         log: row.log,
       }).select('*').single();
@@ -381,33 +417,73 @@ export default function Play({ world, characters, schemaOk, playerName, onCharac
 
   async function nextTurn() {
     if (!combat) return;
-    const alive = combat.combatants.filter((c) => c.hp > 0);
-    const pcsAlive = alive.some((c) => c.kind === 'pc');
-    const enemiesAlive = alive.some((c) => c.kind === 'enemy');
-    if (!pcsAlive) {
+    const outcome = battleOutcome(combat.combatants);
+    if (outcome === 'defeat') {
       await endCombat('Todos los héroes cayeron. El mundo sigue… y recordará esta derrota.', 'failure');
       return;
     }
-    if (!enemiesAlive) {
+    if (outcome === 'retreat') {
+      await endCombat('Nadie queda en pie en el frente. Quienes esperaban en la retaguardia recogen a los suyos y la compañía se repliega.', 'failure');
+      return;
+    }
+    if (outcome === 'victory') {
       await endCombat('¡Victoria! Todos los enemigos cayeron. La aventura continúa.', 'success');
       return;
     }
-    let idx = (combat.turn_index + 1) % combat.combatants.length;
-    let guard = 0;
-    while (combat.combatants[idx].hp <= 0 && guard < combat.combatants.length) {
-      idx = (idx + 1) % combat.combatants.length;
-      guard++;
-    }
-    const round = idx <= combat.turn_index ? combat.round + 1 : combat.round;
-    if (await persistCombat({ ...combat, turn_index: idx, round })) playSound('select');
+    const turn = advanceTurn(combat.combatants, combat.turn_index, combat.round);
+    if (turn && await persistCombat({ ...combat, ...turn })) playSound('select');
   }
+
+  // Mis personajes en este combate: los que creé con mi nombre de jugador.
+  const me = playerKey(playerName);
+  const mine = (combat?.active ? combat.combatants : []).filter((item) => item.kind === 'pc' && !!me && playerKey(ownerById.get(item.ref_id)) === me);
+  const mineAtFront = mine.filter((item) => !item.away);
+  const mineAway = mine.filter((item) => item.away);
+
+  async function leaveTable() {
+    if (!combat) return;
+    let next = combat;
+    for (const item of mineAtFront) next = withdraw(next, item.ref_id) ?? next;
+    if (next === combat || !await persistCombat(next)) return;
+    setResult('Tu personaje espera a salvo en la retaguardia. La mesa sigue sin ti; cuando vuelvas, pulsa «Volver al frente».');
+    playSound('page');
+  }
+
+  async function returnToTable() {
+    if (!combat) return;
+    let next = combat;
+    for (const item of mineAway) next = rejoin(next, item.ref_id) ?? next;
+    if (next === combat || !await persistCombat(next)) return;
+    setResult('Has vuelto al frente. Actuarás cuando llegue tu turno.');
+    playSound('select');
+  }
+
+  // Retirada automática: si un jugador lleva un rato desconectado, cualquier
+  // pestaña que siga en la mesa pone a su personaje a salvo. Si dos lo intentan
+  // a la vez, solo se guarda una vez y la otra se actualiza en silencio.
+  useEffect(() => {
+    if (!combat?.active || !presenceConnected) return;
+    const check = async () => {
+      if (writeInProgress.current) return;
+      const overdue = overdueAbsences(combat.combatants);
+      if (!overdue.length) return;
+      let next = combat;
+      for (const refId of overdue) next = withdraw(next, refId, true) ?? next;
+      if (next === combat) return;
+      writeInProgress.current = true;
+      try { await persistCombat(next, undefined, undefined, true); } catch { /* Se reintenta en la próxima comprobación. */ } finally { writeInProgress.current = false; }
+    };
+    const timer = window.setInterval(() => { void check(); }, 5000);
+    return () => window.clearInterval(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [combat, presenceConnected, presentNames, ownerById]);
 
   async function pcAttack(target: Combatant) {
     if (!combat || !activeChar) return;
     const turn = currentTurn();
     if (!turn || turn.kind !== 'pc') return;
     const attacker = characters.find((character) => character.id === turn.ref_id);
-    if (!attacker || attacker.status !== 'vivo' || turn.hp <= 0) return;
+    if (!attacker || attacker.status !== 'vivo' || turn.hp <= 0 || turn.away) return;
     const weapon = WEAPONS.find((w) => w.name === attacker.weapon) ?? WEAPONS[0];
     const mod = abilityMod(attacker.str);
     const d20 = rollDie(20);
@@ -447,8 +523,11 @@ export default function Play({ world, characters, schemaOk, playerName, onCharac
     if (!turn || turn.kind !== 'enemy' || turn.hp <= 0) return;
     const encounter = adventures.find((item) => item.id === combat.adventure_id) ?? adventure;
     const enemy = encounter.enemies.find((e) => e.name === turn.name) ?? encounter.enemies[0];
-    const targets = combat.combatants.filter((c) => c.kind === 'pc' && c.hp > 0);
-    if (targets.length === 0) return;
+    const targets = enemyTargets(combat.combatants);
+    if (targets.length === 0) {
+      setResult('No hay nadie a su alcance: quienes quedan están en la retaguardia. Pasa al siguiente turno.');
+      return;
+    }
     const target = targets[Math.floor(Math.random() * targets.length)];
     const d20 = rollDie(20);
     const attack = d20 + (enemy?.attack_bonus ?? 2);
@@ -700,9 +779,14 @@ export default function Play({ world, characters, schemaOk, playerName, onCharac
         <div className="card combat-card living-combat" aria-busy={combatPending}>
           <p className="stage-overline">Cada decisión cuenta</p><h2>Combate en {adventure?.name}</h2>
           <p className="hint">Ronda {combat.round} · Turno de: <b>{turn?.name ?? '—'}</b></p>
+          <CombatBoard combat={combat} characters={characters} art={scene ? sceneArtwork(adventure?.name ?? '', scene.place) : undefined} busy={combatPending}
+            onMove={(refId, x, y) => void runCombatAction(async () => {
+              const next = moveCombatant(combat, refId, x, y, COMBAT_COLS, COMBAT_ROWS);
+              if (next && await persistCombat(next)) playSound('move');
+            })} />
           <div className="combatants">
             {combat.combatants.map((c, i) => (
-              <div key={c.ref_id} className={`combatant ${i === combat.turn_index % combat.combatants.length ? 'active-turn' : ''} ${c.hp <= 0 ? 'down' : ''}`}>
+              <div key={c.ref_id} className={`combatant ${i === combat.turn_index % combat.combatants.length ? 'active-turn' : ''} ${c.hp <= 0 ? 'down' : ''} ${c.away ? 'away' : ''}`}>
                 {c.kind === 'enemy' ? (
                   <MonsterPortrait name={c.name} className="combat-portrait" />
                 ) : (() => {
@@ -712,7 +796,7 @@ export default function Play({ world, characters, schemaOk, playerName, onCharac
                     : <span className="character-avatar" aria-hidden="true">{c.name.charAt(0)}</span>;
                 })()}
                 <div className="combatant-info">
-                  <b>{c.name}</b>
+                  <b>{c.name}{c.away && <em className="away-tag">En la retaguardia</em>}</b>
                   <span>Vida {Math.max(0, c.hp)}/{c.max_hp} · Defensa {c.ac}</span>
                   <div className="hp-bar"><div style={{ width: `${(Math.max(0, c.hp) / Math.max(1, c.max_hp)) * 100}%` }} /></div>
                 </div>
@@ -720,7 +804,23 @@ export default function Play({ world, characters, schemaOk, playerName, onCharac
             ))}
           </div>
 
-          {turn?.kind === 'pc' && (
+          {(mineAtFront.length > 0 || mineAway.length > 0) && (
+            <div className="rearguard-bar">
+              {mineAway.length > 0
+                ? <><p><b>{mineAway.map((item) => item.name).join(', ')}</b> espera en la retaguardia. Nadie puede atacarle mientras estés fuera.</p>
+                  <button className="btn btn-primary" disabled={combatPending} onClick={() => runCombatAction(returnToTable)}>Volver al frente</button></>
+                : <><p>¿Una emergencia? Tu personaje se pone a salvo y la mesa sigue sin ti.</p>
+                  <button className="btn" disabled={combatPending} onClick={() => runCombatAction(leaveTable)}>Tengo que irme</button></>}
+            </div>
+          )}
+
+          {turn?.kind === 'pc' && turn.away && (
+            <div>
+              <h3>{turn.name} está en la retaguardia</h3>
+              <button className="btn btn-primary" disabled={combatPending} onClick={() => runCombatAction(nextTurn)}>Siguiente turno →</button>
+            </div>
+          )}
+          {turn?.kind === 'pc' && !turn.away && (
             <div>
               <h3>Tu turno, {turn.name}</h3>
               <div className="grid-actions">

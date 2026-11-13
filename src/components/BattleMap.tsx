@@ -14,6 +14,9 @@ import {
   type MapToken,
 } from '../lib/supabase';
 import { LUGARES, todosLosMapas, urlMapa } from '../lib/atlas';
+import CombatBoard from './CombatBoard';
+import { useActiveCombat, saveCombatMove } from '../hooks/useActiveCombat';
+import { COMBAT_COLS, COMBAT_ROWS, moveCombatant } from '../lib/boardCombat';
 
 type Background = 'pergamino' | 'mazmorra' | 'bosque' | 'taberna' | 'nieve';
 
@@ -78,9 +81,23 @@ interface BattleMapProps {
   schemaOk: boolean;
   /** Mapa del atlas abierto desde la pestaña Atlas (o null para cuadrícula de colores). */
   mapaInicial?: { slug: string; nombre: string } | null;
+  /** Lleva a la pestaña Aventura, donde se resuelven los ataques. */
+  onOpenPlay?: () => void;
 }
 
-export default function BattleMap({ worldId, characters, schemaOk, mapaInicial }: BattleMapProps) {
+export default function BattleMap({ worldId, characters, schemaOk, mapaInicial, onOpenPlay }: BattleMapProps) {
+  const [combat, setCombat] = useActiveCombat(worldId, schemaOk);
+  const [moving, setMoving] = useState(false);
+  async function moveInCombat(refId: string, x: number, y: number) {
+    if (!combat || moving) return;
+    const next = moveCombatant(combat, refId, x, y, COMBAT_COLS, COMBAT_ROWS);
+    if (!next) return;
+    setMoving(true);
+    const saved = await saveCombatMove(combat, next);
+    setMoving(false);
+    if (saved) { setCombat(saved); playSound('move'); }
+    else setNotice('La mesa cambió mientras movías la ficha. Vuelve a intentarlo.');
+  }
   const [gridSize, setGridSize] = useState<number>(12);
   const [background, setBackground] = useState<Background>('pergamino');
   const [atlasMap, setAtlasMap] = useState<string | null>(mapaInicial?.slug ?? null);
@@ -293,6 +310,14 @@ export default function BattleMap({ worldId, characters, schemaOk, mapaInicial }
         <div><p className="battle-eyebrow">Despliega la aventura</p><h2>Mesa de batalla</h2></div>
         <span className="battle-piece-count"><MapIcon kind="pieces" />{tokens.length} fichas en juego</span>
       </header>
+
+      {combat && <>
+        <div className="battle-live-combat" role="status">
+          <p><strong>Hay un combate en curso.</strong><small>Ronda {combat.round} · Actúa {combat.combatants[combat.turn_index % combat.combatants.length]?.name ?? 'la compañía'}. Los golpes y los movimientos se ven aquí en directo.</small></p>
+          {onOpenPlay && <button type="button" className="btn btn-primary" onClick={onOpenPlay}>Resolver acciones</button>}
+        </div>
+        <CombatBoard combat={combat} characters={characters} art={atlasMap ? urlMapa(atlasMap) : undefined} busy={moving} onMove={(refId, x, y) => void moveInCombat(refId, x, y)} />
+      </>}
 
       <div className="battle-tools">
         <details className="battle-setup">
