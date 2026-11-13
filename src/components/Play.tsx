@@ -20,7 +20,8 @@ import CharacterPortrait from './CharacterPortrait';
 import CombatBoard from './CombatBoard';
 import { COMBAT_COLS, COMBAT_ROWS, moveCombatant } from '../lib/boardCombat';
 import { readAppearance } from '../lib/appearance';
-import { ABSENCE_GRACE_MS, absentCombatants, battleOutcome, enemyTargets, nextTurn as advanceTurn, playerKey, rejoin, withdraw } from '../lib/rearguard';
+import { ABSENCE_GRACE_MS, absentCombatants, afterAttack, battleOutcome, enemyTargets, nextTurn as advanceTurn, playerKey, rejoin, withdraw, type BattleOutcome } from '../lib/rearguard';
+import { minimumHitDamage } from '../lib/combatRules';
 import {
   SKILLS,
   WEAPONS,
@@ -107,6 +108,12 @@ function skillMod(c: CharacterRow, skillName: string): number {
   const base = abilityMod(ab[skill.ability] ?? 10);
   const prof = c.skills.includes(skillName) ? proficiencyBonus(c.level) : 0;
   return base + prof;
+}
+
+function combatOutcomeMessage(outcome: BattleOutcome): string {
+  if (outcome === 'victory') return '¡Victoria! Todos los enemigos cayeron. La aventura continúa.';
+  if (outcome === 'retreat') return 'Nadie queda en pie en el frente. Quienes esperaban en la retaguardia recogen a los suyos y la compañía se repliega.';
+  return 'Todos los héroes cayeron. El mundo sigue… y recordará esta derrota.';
 }
 
 export default function Play({ world, characters, schemaOk, playerName, onCharactersChange, onCreateCharacter, onOpenMap, sharedScene, presentNames = NOBODY, presenceConnected = false }: PlayProps) {
@@ -254,7 +261,7 @@ export default function Play({ world, characters, schemaOk, playerName, onCharac
     }
   }
 
-  async function persistCombat(next: CombatRow, attackEvent?: CombatAttackEvent, attackerRefId?: string, silent = false): Promise<boolean> {
+  async function persistCombat(next: CombatRow, attackEvent?: CombatAttackEvent, attackerRefId?: string, silent = false, completionMessage?: string): Promise<boolean> {
     if (!schemaOk || !world) {
       setResult('Necesitas conexión con el mundo para guardar el combate.');
       return false;
@@ -277,7 +284,9 @@ export default function Play({ world, characters, schemaOk, playerName, onCharac
           ? next.combatants.map((item) => item.ref_id === attackerRefId ? { ...item, last_attack: committedAttack } : item)
           : next.combatants,
         // Older clients render log entries directly, so this remains plain text.
-        log: committedAttack ? [...next.log, committedAttack.message] : next.log,
+        log: committedAttack
+          ? [...next.log, committedAttack.message, ...(completionMessage ? [completionMessage] : [])]
+          : next.log,
         active: next.active,
         updated_at: committedAt,
       })
@@ -394,10 +403,7 @@ export default function Play({ world, characters, schemaOk, playerName, onCharac
     playSound('combat');
   }
 
-  async function endCombat(msg: string, sound: 'success' | 'failure' | 'select' = 'select') {
-    if (!combat) return;
-    const next = { ...combat, active: false, log: [...combat.log, msg] };
-    if (!await persistCombat(next)) return;
+  async function publishCombatEnd(msg: string, sound: 'success' | 'failure' | 'select') {
     setResult(msg);
     playSound(sound);
     if (schemaOk && world) {
@@ -408,6 +414,13 @@ export default function Play({ world, characters, schemaOk, playerName, onCharac
         kind: 'cronica',
       });
     }
+  }
+
+  async function endCombat(msg: string, sound: 'success' | 'failure' | 'select' = 'select') {
+    if (!combat) return;
+    const next = { ...combat, active: false, log: [...combat.log, msg] };
+    if (!await persistCombat(next)) return;
+    await publishCombatEnd(msg, sound);
   }
 
   function currentTurn(): Combatant | null {
@@ -493,7 +506,7 @@ export default function Play({ world, characters, schemaOk, playerName, onCharac
     const combatants = combat.combatants.map((combatant) => ({ ...combatant }));
     if (attack >= target.ac) {
       const { total: rolledDamage, detail } = parseAndRoll(`${weapon.dice}${mod >= 0 ? '+' : ''}${mod}`);
-      damage = Math.max(0, rolledDamage);
+      damage = minimumHitDamage(rolledDamage);
       const t = combatants.find((c) => c.ref_id === target.ref_id);
       if (t) t.hp = Math.max(0, t.hp - damage);
       logLine = `${attacker.name} ataca a ${target.name} con ${weapon.name}: saca ${d20} + bono = ${attack} contra defensa ${target.ac}. ¡Le pega! Daño ${damage} (${detail}).`;
@@ -514,7 +527,10 @@ export default function Play({ world, characters, schemaOk, playerName, onCharac
       attacker: attacker.name, target: target.name, attackerKind: 'pc',
       hit: attack >= target.ac, damage, message: logLine,
     };
-    await persistCombat({ ...combat, combatants }, attackEvent, turn.ref_id);
+    const transition = afterAttack({ ...combat, combatants });
+    const completionMessage = transition.outcome ? combatOutcomeMessage(transition.outcome) : undefined;
+    if (!await persistCombat(transition.combat, attackEvent, turn.ref_id, false, completionMessage)) return;
+    if (transition.outcome) await publishCombatEnd(completionMessage!, transition.outcome === 'victory' ? 'success' : 'failure');
   }
 
   async function enemyAttack() {
@@ -537,7 +553,7 @@ export default function Play({ world, characters, schemaOk, playerName, onCharac
     let nextHp = target.hp;
     if (attack >= target.ac) {
       const { total: rolledDamage, detail } = parseAndRoll(enemy?.damage_dice ?? '1d6');
-      damage = Math.max(0, rolledDamage);
+      damage = minimumHitDamage(rolledDamage);
       nextHp = Math.max(0, target.hp - damage);
       const targetCopy = combatants.find((c) => c.ref_id === target.ref_id);
       if (targetCopy) targetCopy.hp = nextHp;
@@ -550,7 +566,10 @@ export default function Play({ world, characters, schemaOk, playerName, onCharac
       attacker: turn.name, target: target.name, attackerKind: 'enemy',
       hit: attack >= target.ac, damage, message: logLine,
     };
-    if (!await persistCombat({ ...combat, combatants }, attackEvent, turn.ref_id)) return;
+    const transition = afterAttack({ ...combat, combatants });
+    const completionMessage = transition.outcome ? combatOutcomeMessage(transition.outcome) : undefined;
+    if (!await persistCombat(transition.combat, attackEvent, turn.ref_id, false, completionMessage)) return;
+    if (transition.outcome) await publishCombatEnd(completionMessage!, transition.outcome === 'victory' ? 'success' : 'failure');
     // The copied combatant and character sheet receive exactly the same damage.
     if (attack >= target.ac && schemaOk) {
       const { error } = await supabase.from('characters').update({ hp: nextHp })
@@ -817,7 +836,7 @@ export default function Play({ world, characters, schemaOk, playerName, onCharac
           {turn?.kind === 'pc' && turn.away && (
             <div>
               <h3>{turn.name} está en la retaguardia</h3>
-              <button className="btn btn-primary" disabled={combatPending} onClick={() => runCombatAction(nextTurn)}>Siguiente turno →</button>
+              <button className="btn btn-primary" disabled={combatPending} onClick={() => runCombatAction(nextTurn)}>Pasar turno →</button>
             </div>
           )}
           {turn?.kind === 'pc' && !turn.away && (
@@ -832,7 +851,7 @@ export default function Play({ world, characters, schemaOk, playerName, onCharac
                 <button className="btn" onClick={() => setResult(`${turn.name} se defiende: hasta su próximo turno, los ataques contra él tienen desventaja.`)}>
                   Defenderme
                 </button>
-                <button className="btn btn-primary" disabled={combatPending} onClick={() => runCombatAction(nextTurn)}>Siguiente turno →</button>
+                <button className="btn btn-primary" disabled={combatPending} onClick={() => runCombatAction(nextTurn)}>Pasar turno →</button>
               </div>
             </div>
           )}
@@ -840,7 +859,7 @@ export default function Play({ world, characters, schemaOk, playerName, onCharac
             <div>
               <h3>Turno del enemigo: {turn.name}</h3>
               <button className="btn btn-danger" disabled={combatPending} onClick={() => runCombatAction(enemyAttack)}>Que ataque</button>
-              <button className="btn btn-primary" disabled={combatPending} onClick={() => runCombatAction(nextTurn)}>Siguiente turno →</button>
+              <button className="btn btn-primary" disabled={combatPending} onClick={() => runCombatAction(nextTurn)}>Pasar turno →</button>
             </div>
           )}
 
