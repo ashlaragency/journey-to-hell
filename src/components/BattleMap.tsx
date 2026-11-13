@@ -3,11 +3,12 @@
 // mover hasta 6 casillas (30 pies). La distancia se mide con la regla de
 // Chebyshev: la diagonal cuenta como una sola casilla.
 import { playSound } from '../lib/audio';
-import { useEffect, useState, type CSSProperties } from 'react';
+import { useState, type CSSProperties } from 'react';
 import './BattleMap.css';
 import MonsterPortrait from './MonsterPortrait';
 import CharacterPortrait from './CharacterPortrait';
 import { readAppearance } from '../lib/appearance';
+import { clearDeathSaves } from '../lib/deathSaves.ts';
 import {
   supabase,
   type CharacterRow,
@@ -16,6 +17,7 @@ import {
 import { LUGARES, todosLosMapas, urlMapa } from '../lib/atlas';
 import CombatBoard from './CombatBoard';
 import { useActiveCombat, saveCombatMove } from '../hooks/useActiveCombat';
+import { useCombatActions } from '../hooks/useCombatActions';
 import { COMBAT_COLS, COMBAT_ROWS, moveCombatant } from '../lib/boardCombat';
 
 type Background = 'pergamino' | 'mazmorra' | 'bosque' | 'taberna' | 'nieve';
@@ -79,15 +81,20 @@ interface BattleMapProps {
   worldId: string | null;
   characters: CharacterRow[];
   schemaOk: boolean;
+  playerName: string;
+  onCharactersChange: () => void;
   /** Mapa del atlas abierto desde la pestaña Atlas (o null para cuadrícula de colores). */
   mapaInicial?: { slug: string; nombre: string } | null;
-  /** Lleva a la pestaña Aventura, donde se resuelven los ataques. */
-  onOpenPlay?: () => void;
 }
 
-export default function BattleMap({ worldId, characters, schemaOk, mapaInicial, onOpenPlay }: BattleMapProps) {
+export default function BattleMap({ worldId, characters, schemaOk, playerName, onCharactersChange, mapaInicial }: BattleMapProps) {
   const [combat, setCombat] = useActiveCombat(worldId, schemaOk);
   const [moving, setMoving] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const actions = useCombatActions({
+    combat, setCombat, worldId, schemaOk, playerName, characters,
+    onCharactersChange, setResult: setNotice,
+  });
   async function moveInCombat(refId: string, x: number, y: number) {
     if (!combat || moving) return;
     const next = moveCombatant(combat, refId, x, y, COMBAT_COLS, COMBAT_ROWS);
@@ -101,23 +108,14 @@ export default function BattleMap({ worldId, characters, schemaOk, mapaInicial, 
   const [gridSize, setGridSize] = useState<number>(12);
   const [background, setBackground] = useState<Background>('pergamino');
   const [atlasMap, setAtlasMap] = useState<string | null>(mapaInicial?.slug ?? null);
-  const [mapName, setMapName] = useState('Mapa 1');
+  const [mapName, setMapName] = useState(mapaInicial?.nombre ?? 'Mapa 1');
   const [tokens, setTokens] = useState<MapToken[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showAddCharacter, setShowAddCharacter] = useState(false);
   const [showAddEnemy, setShowAddEnemy] = useState(false);
   const [measuring, setMeasuring] = useState(false);
   const [measurePoints, setMeasurePoints] = useState<{ x: number; y: number }[]>([]);
-  const [notice, setNotice] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-
-  // Cuando el Atlas abre un mapa aquí, se pone como fondo de la cuadrícula.
-  useEffect(() => {
-    if (mapaInicial) {
-      setAtlasMap(mapaInicial.slug);
-      setMapName((prev) => (prev === 'Mapa 1' || prev.trim() === '' ? mapaInicial.nombre : prev));
-    }
-  }, [mapaInicial]);
 
   const bg = BACKGROUNDS.find((b) => b.value === background) ?? BACKGROUNDS[0];
   const livingCharacters = characters.filter((c) => c.status === 'vivo');
@@ -246,10 +244,12 @@ export default function BattleMap({ worldId, characters, schemaOk, mapaInicial, 
         setNotice('Recupera la conexión antes de cambiar la vida de un personaje.');
         return;
       }
-      const { error } = await supabase.from('characters').update({ hp: newHp })
+      let query = supabase.from('characters').update(newHp > 0 ? { hp: newHp, notes: clearDeathSaves(character.notes) } : { hp: newHp })
         .eq('id', characterId).eq('world_id', worldId).eq('status', 'vivo')
-        .eq('hp', character.hp).select('id').single();
-      if (error) {
+        .eq('hp', character.hp);
+      if (newHp > 0) query = character.notes === null ? query.is('notes', null) : query.eq('notes', character.notes);
+      const { data, error } = await query.select('id').maybeSingle();
+      if (error || !data) {
         setNotice('No se pudo guardar la vida. Revisa la hoja actualizada antes de intentarlo de nuevo.');
         return;
       }
@@ -314,9 +314,12 @@ export default function BattleMap({ worldId, characters, schemaOk, mapaInicial, 
       {combat && <>
         <div className="battle-live-combat" role="status">
           <p><strong>Hay un combate en curso.</strong><small>Ronda {combat.round} · Actúa {combat.combatants[combat.turn_index % combat.combatants.length]?.name ?? 'la compañía'}. Los golpes y los movimientos se ven aquí en directo.</small></p>
-          {onOpenPlay && <button type="button" className="btn btn-primary" onClick={onOpenPlay}>Resolver acciones</button>}
         </div>
-        <CombatBoard combat={combat} characters={characters} art={atlasMap ? urlMapa(atlasMap) : undefined} busy={moving} onMove={(refId, x, y) => void moveInCombat(refId, x, y)} />
+        <CombatBoard combat={combat} characters={characters} art={atlasMap ? urlMapa(atlasMap) : undefined} busy={moving || actions.pending}
+          onMove={(refId, x, y) => void moveInCombat(refId, x, y)}
+          onAttack={(attackerRefId, targetRefId) => void actions.runAction(() => actions.pcAttack(targetRefId, attackerRefId))}
+          onEnemyAttack={(enemyRefId) => void actions.runAction(() => actions.enemyAttack(enemyRefId))}
+          onPassTurn={() => void actions.runAction(actions.nextTurn)} />
       </>}
 
       <div className="battle-tools">

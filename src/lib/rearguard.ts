@@ -43,6 +43,15 @@ export function battleOutcome(combatants: Combatant[]): BattleOutcome | null {
   return combatants.some((item) => item.kind === 'pc' && item.away && item.hp > 0) ? 'retreat' : 'defeat';
 }
 
+/** Tras cualquier ataque confirmado, cierra una pelea resuelta o avanza la iniciativa. */
+export function afterAttack(combat: CombatRow): { combat: CombatRow; outcome: BattleOutcome | null } {
+  const outcome = battleOutcome(combat.combatants);
+  if (outcome) return { combat: { ...combat, active: false }, outcome };
+  const turn = nextTurn(combat.combatants, combat.turn_index, combat.round);
+  if (!turn) return { combat: { ...combat, active: false }, outcome: 'defeat' };
+  return { combat: { ...combat, ...turn }, outcome: null };
+}
+
 export function withdraw(combat: CombatRow, refId: string, automatic = false): CombatRow | null {
   const index = combat.combatants.findIndex((item) => item.ref_id === refId);
   const target = combat.combatants[index];
@@ -52,6 +61,15 @@ export function withdraw(combat: CombatRow, refId: string, automatic = false): C
     ? `${target.name} perdió el contacto con la mesa y se repliega a la retaguardia. Nadie puede atacarle hasta que vuelva.`
     : `${target.name} se repliega a la retaguardia. Nadie puede atacarle hasta que vuelva.`;
   const next: CombatRow = { ...combat, combatants, log: [...combat.log, line] };
+  const outcome = battleOutcome(combatants);
+  if (outcome) {
+    const ending = outcome === 'retreat'
+      ? 'La compañía se repliega; el encuentro termina.'
+      : outcome === 'victory'
+        ? 'La compañía vence; el encuentro termina.'
+        : 'Nadie queda en pie; el encuentro termina.';
+    return { ...next, active: false, log: [...next.log, ending] };
+  }
   if (combat.combatants.length && combat.turn_index % combat.combatants.length === index) {
     const turn = nextTurn(combatants, combat.turn_index, combat.round);
     if (turn) return { ...next, ...turn };

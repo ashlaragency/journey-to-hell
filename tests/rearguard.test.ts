@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { absentCombatants, battleOutcome, enemyTargets, nextTurn, rejoin, withdraw } from '../src/lib/rearguard.ts';
+import { absentCombatants, afterAttack, battleOutcome, enemyTargets, nextTurn, rejoin, withdraw } from '../src/lib/rearguard.ts';
 
 const pc = (ref_id: string, extra = {}) => ({ kind: 'pc' as const, ref_id, name: ref_id, initiative: 10, hp: 8, max_hp: 8, ac: 12, ...extra });
 const enemy = (ref_id: string, extra = {}) => ({ kind: 'enemy' as const, ref_id, name: ref_id, initiative: 10, hp: 6, max_hp: 6, ac: 11, ...extra });
@@ -17,6 +17,12 @@ describe('Retaguardia', () => {
     assert.equal(next.turn_index, 1);
     assert.deepEqual(enemyTargets(next.combatants).map((item) => item.name), ['Bram']);
     assert.match(next.log.at(-1) ?? '', /Iria se repliega/);
+  });
+  it('termina en repliegue si el último héroe del frente se retira', () => {
+    const next = withdraw(combat([pc('Iria'), enemy('Goblin')]), 'Iria', true);
+    assert.equal(next?.active, false);
+    assert.equal(next?.combatants[0].away, true);
+    assert.match(next?.log.at(-1) ?? '', /repliega|retirada/i);
   });
   it('pasa el turno si quien se va tenía el turno', () => {
     const next = withdraw(combat([pc('Iria'), enemy('Goblin'), pc('Bram')], 0), 'Iria', true);
@@ -54,6 +60,21 @@ describe('Retaguardia', () => {
     assert.equal(battleOutcome([pc('Iria', { hp: 0 }), enemy('Goblin')]), 'defeat');
     assert.equal(battleOutcome([pc('Iria', { hp: 0 }), pc('Bram', { away: true }), enemy('Goblin')]), 'retreat');
     assert.equal(battleOutcome([pc('Iria', { hp: 0 }), pc('Bram', { away: true, hp: 0 }), enemy('Goblin')]), 'defeat');
+  });
+  it('avanza automáticamente al siguiente combatiente válido después de atacar', () => {
+    const base = combat([pc('Iria'), enemy('Goblin', { hp: 0 }), pc('Bram', { away: true }), enemy('Lobo'), pc('Mara')], 0);
+    const result = afterAttack(base);
+    assert.equal(result.outcome, null);
+    assert.equal(result.combat.turn_index, 3);
+    assert.equal(result.combat.round, 1);
+    assert.equal(result.combat.active, true);
+  });
+  it('cierra el combate en la misma transición cuando el ataque lo termina', () => {
+    const base = combat([pc('Iria'), enemy('Goblin', { hp: 0 })], 0);
+    const result = afterAttack(base);
+    assert.equal(result.outcome, 'victory');
+    assert.equal(result.combat.active, false);
+    assert.equal(result.combat.turn_index, 0);
   });
   it('solo señala personajes con dueño conocido que no está en la mesa', () => {
     const list = [pc('a'), pc('b'), pc('c'), pc('d', { away: true }), enemy('e')];

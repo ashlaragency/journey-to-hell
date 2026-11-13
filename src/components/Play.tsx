@@ -2,13 +2,12 @@
 // Escena arriba, pregunta "¿Qué haces?" con opciones grandes, resultado en
 // palabras simples, botón Continuar. Combate con enemigos precargados.
 import { playSound } from '../lib/audio';
-import { combatLogText, publishLocalCombatEffect, type CombatAttackEvent } from '../lib/combatEffects';
+import { combatLogText } from '../lib/combatEffects';
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import './PlayAtmosphere.css';
 import {
   supabase,
   saveRoll,
-  parseAndRoll,
   type World,
   type CharacterRow,
   type CombatRow,
@@ -20,10 +19,11 @@ import CharacterPortrait from './CharacterPortrait';
 import CombatBoard from './CombatBoard';
 import { COMBAT_COLS, COMBAT_ROWS, moveCombatant } from '../lib/boardCombat';
 import { readAppearance } from '../lib/appearance';
-import { ABSENCE_GRACE_MS, absentCombatants, battleOutcome, enemyTargets, nextTurn as advanceTurn, playerKey, rejoin, withdraw } from '../lib/rearguard';
+import { nextTurn as advanceTurn, playerKey, rejoin, withdraw } from '../lib/rearguard';
+import { useCombatActions } from '../hooks/useCombatActions';
+import { clearDeathSaves, readDeathSaves, resolveDeathSave, writeDeathSaves } from '../lib/deathSaves.ts';
 import {
   SKILLS,
-  WEAPONS,
   abilityMod,
   proficiencyBonus,
   rollDie,
@@ -37,9 +37,7 @@ interface PlayProps {
   onCharactersChange: () => void;
   onCreateCharacter?: () => void;
   onOpenMap?: () => void;
-  /** Nombres de los jugadores conectados ahora mismo a la mesa. */
-  presentNames?: string[];
-  presenceConnected?: boolean;
+  overdueCharacterIds?: string[];
   sharedScene?: { id: string; adventureId: string; sceneIndex: number; place: string; narration: string; director: string } | null;
 }
 
@@ -58,8 +56,6 @@ interface Adv {
 }
 
 const DC_EXPLORAR = 12;
-const NOBODY: string[] = [];
-
 const EXPLORATION_ACTIONS = [
   { skill: 'Percepción', label: 'Mirar', title: 'Mirar a mi alrededor', detail: 'Observa lo que otros pasan por alto.', icon: 'eye' },
   { skill: 'Persuasión', label: 'Hablar', title: 'Hablar con alguien', detail: 'Una palabra puede abrir un camino.', icon: 'voice' },
@@ -109,7 +105,7 @@ function skillMod(c: CharacterRow, skillName: string): number {
   return base + prof;
 }
 
-export default function Play({ world, characters, schemaOk, playerName, onCharactersChange, onCreateCharacter, onOpenMap, sharedScene, presentNames = NOBODY, presenceConnected = false }: PlayProps) {
+export default function Play({ world, characters, schemaOk, playerName, onCharactersChange, onCreateCharacter, onOpenMap, sharedScene, overdueCharacterIds = [] }: PlayProps) {
   const [adventures, setAdventures] = useState<Adv[]>(ADVENTURES_SEED.map((a, i) => ({ ...a, id: `seed-${i}` })));
   const [adventureError, setAdventureError] = useState<string | null>(null);
   const [advId, setAdvId] = useState<string>(() => localStorage.getItem('jth_adv') ?? '');
@@ -121,13 +117,13 @@ export default function Play({ world, characters, schemaOk, playerName, onCharac
     setResultState({ message, sceneId: sharedScene?.id ?? null });
   }
   const [combat, setCombat] = useState<CombatRow | null>(null);
-  const [deathSaves, setDeathSaves] = useState<Record<string, { ok: number; fail: number }>>({});
   const [fallForm, setFallForm] = useState<string | null>(null);
+  const [deathSavePending, setDeathSavePending] = useState<Set<string>>(() => new Set());
   const [legacyKind, setLegacyKind] = useState<'tumba' | 'cancion' | 'leyenda' | 'objeto' | 'lugar'>('leyenda');
   const [legacyTitle, setLegacyTitle] = useState('');
   const [legacyBody, setLegacyBody] = useState('');
-  const [combatPending, setCombatPending] = useState(false);
   const writeInProgress = useRef(false);
+  const deathSaveInProgress = useRef(new Set<string>());
 
   const living = useMemo(() => characters.filter((c) => c.status === 'vivo'), [characters]);
   const activeChar = useMemo(
@@ -136,25 +132,6 @@ export default function Play({ world, characters, schemaOk, playerName, onCharac
   );
   const characterById = useMemo(() => new Map(characters.map((character) => [character.id, character])), [characters]);
   const ownerById = useMemo(() => new Map(characters.map((character) => [character.id, character.owner_name])), [characters]);
-  // Desde cuándo falta cada jugador. Solo se confía en la lista mientras esta
-  // pestaña sigue conectada: sin conexión no sabemos quién está y quién no.
-  const absentSince = useRef(new Map<string, number>());
-  useEffect(() => {
-    if (!presenceConnected) { absentSince.current.clear(); return; }
-    const present = new Set(presentNames.map(playerKey));
-    const now = Date.now();
-    for (const owner of new Set(characters.map((character) => playerKey(character.owner_name)))) {
-      if (!owner || present.has(owner)) absentSince.current.delete(owner);
-      else if (!absentSince.current.has(owner)) absentSince.current.set(owner, now);
-    }
-  }, [presentNames, presenceConnected, characters]);
-  function overdueAbsences(combatants: Combatant[]): string[] {
-    if (!presenceConnected) return [];
-    const now = Date.now();
-    return absentCombatants(combatants, ownerById, presentNames)
-      .filter(({ owner }) => now - (absentSince.current.get(owner) ?? now) >= ABSENCE_GRACE_MS)
-      .map(({ refId }) => refId);
-  }
   const selectedAdventureId = sharedScene?.adventureId ?? advId;
   const adventure = useMemo(
     () => adventures.find((a) => a.id === selectedAdventureId) ?? (sharedScene ? null : adventures[0]) ?? null,
@@ -165,6 +142,11 @@ export default function Play({ world, characters, schemaOk, playerName, onCharac
   const scene = sharedScene ?? adventure?.scenes[Math.min(currentSceneIndex, adventure.scenes.length - 1)];
   const atmosphere = atmosphereFor(scene?.place ?? '', scene?.narration ?? '');
   const sceneKey = sharedScene?.id ?? `${adventure?.id}-${currentSceneIndex}`;
+
+  const combatActions = useCombatActions({
+    combat, setCombat, worldId: world?.id ?? null, schemaOk, playerName, characters, onCharactersChange, setResult, adventures, adventure,
+  });
+  const { pending: combatPending, currentTurn, nextTurn, pcAttack, enemyAttack, endCombat } = combatActions;
 
 
   useEffect(() => {
@@ -242,68 +224,11 @@ export default function Play({ world, characters, schemaOk, playerName, onCharac
   async function runCombatAction(action: () => Promise<void>) {
     if (writeInProgress.current) return;
     writeInProgress.current = true;
-    setCombatPending(true);
     try {
-      await action();
-    } catch {
-      setResult('No se pudo guardar la acción. Revisa tu conexión antes de volver a intentarlo.');
-      playSound('failure');
+      await combatActions.runAction(action);
     } finally {
       writeInProgress.current = false;
-      setCombatPending(false);
     }
-  }
-
-  async function persistCombat(next: CombatRow, attackEvent?: CombatAttackEvent, attackerRefId?: string, silent = false): Promise<boolean> {
-    if (!schemaOk || !world) {
-      setResult('Necesitas conexión con el mundo para guardar el combate.');
-      return false;
-    }
-    if (attackEvent && !next.combatants.some((item) => item.ref_id === attackerRefId)) {
-      setResult('El atacante ya no está en este combate. Revisa la mesa antes de continuar.');
-      return false;
-    }
-    // Only the newly committed attack shares this timestamp. Turn changes leave
-    // earlier event timestamps untouched so Realtime cannot replay them.
-    const previousAt = Date.parse(combat?.updated_at ?? next.updated_at) || 0;
-    const committedAt = new Date(Math.max(Date.now(), previousAt + 1)).toISOString();
-    const committedAttack = attackEvent ? { ...attackEvent, at: committedAt } : null;
-    const { data, error } = await supabase
-      .from('combat')
-      .update({
-        round: next.round,
-        turn_index: next.turn_index,
-        combatants: committedAttack
-          ? next.combatants.map((item) => item.ref_id === attackerRefId ? { ...item, last_attack: committedAttack } : item)
-          : next.combatants,
-        // Older clients render log entries directly, so this remains plain text.
-        log: committedAttack ? [...next.log, committedAttack.message] : next.log,
-        active: next.active,
-        updated_at: committedAt,
-      })
-      .eq('id', next.id)
-      .eq('world_id', world.id)
-      .eq('active', true)
-      .eq('updated_at', combat?.updated_at ?? next.updated_at)
-      .select('*')
-      .maybeSingle();
-    if (!error && !data) {
-      const { data: current } = await supabase.from('combat').select('*').eq('id', next.id).eq('world_id', world.id).maybeSingle();
-      if (current) setCombat(current as CombatRow);
-      if (silent) return false;
-      setResult('La mesa cambió mientras actuabas. Revisa el turno actualizado y vuelve a elegir tu acción.');
-      playSound('failure');
-      return false;
-    }
-    if (error || !data) {
-      if (silent) return false;
-      setResult('No se pudo guardar la acción del combate. Inténtalo de nuevo.');
-      playSound('failure');
-      return false;
-    }
-    setCombat(data as CombatRow);
-    if (committedAttack) publishLocalCombatEffect(committedAttack, world.id);
-    return true;
   }
 
   async function rollSkill(skillName: string, label: string) {
@@ -355,7 +280,7 @@ export default function Play({ world, characters, schemaOk, playerName, onCharac
     ].sort((a, b) => b.initiative - a.initiative);
     // Quien lleva un rato fuera de la mesa empieza a salvo en la retaguardia,
     // siempre que quede alguien en el frente para pelear.
-    const overdue = new Set(overdueAbsences(combatants));
+    const overdue = new Set(overdueCharacterIds);
     const waiting = combatants.filter((item) => overdue.has(item.ref_id));
     const startsAway = waiting.length > 0 && combatants.some((item) => item.kind === 'pc' && item.hp > 0 && !overdue.has(item.ref_id));
     if (startsAway) for (const item of waiting) item.away = true;
@@ -394,46 +319,6 @@ export default function Play({ world, characters, schemaOk, playerName, onCharac
     playSound('combat');
   }
 
-  async function endCombat(msg: string, sound: 'success' | 'failure' | 'select' = 'select') {
-    if (!combat) return;
-    const next = { ...combat, active: false, log: [...combat.log, msg] };
-    if (!await persistCombat(next)) return;
-    setResult(msg);
-    playSound(sound);
-    if (schemaOk && world) {
-      await supabase.from('journal_entries').insert({
-        world_id: world.id,
-        title: 'Batalla',
-        body: msg,
-        kind: 'cronica',
-      });
-    }
-  }
-
-  function currentTurn(): Combatant | null {
-    if (!combat || combat.combatants.length === 0) return null;
-    return combat.combatants[combat.turn_index % combat.combatants.length];
-  }
-
-  async function nextTurn() {
-    if (!combat) return;
-    const outcome = battleOutcome(combat.combatants);
-    if (outcome === 'defeat') {
-      await endCombat('Todos los héroes cayeron. El mundo sigue… y recordará esta derrota.', 'failure');
-      return;
-    }
-    if (outcome === 'retreat') {
-      await endCombat('Nadie queda en pie en el frente. Quienes esperaban en la retaguardia recogen a los suyos y la compañía se repliega.', 'failure');
-      return;
-    }
-    if (outcome === 'victory') {
-      await endCombat('¡Victoria! Todos los enemigos cayeron. La aventura continúa.', 'success');
-      return;
-    }
-    const turn = advanceTurn(combat.combatants, combat.turn_index, combat.round);
-    if (turn && await persistCombat({ ...combat, ...turn })) playSound('select');
-  }
-
   // Mis personajes en este combate: los que creé con mi nombre de jugador.
   const me = playerKey(playerName);
   const mine = (combat?.active ? combat.combatants : []).filter((item) => item.kind === 'pc' && !!me && playerKey(ownerById.get(item.ref_id)) === me);
@@ -444,7 +329,7 @@ export default function Play({ world, characters, schemaOk, playerName, onCharac
     if (!combat) return;
     let next = combat;
     for (const item of mineAtFront) next = withdraw(next, item.ref_id) ?? next;
-    if (next === combat || !await persistCombat(next)) return;
+    if (next === combat || !await combatActions.persistCombat(next)) return;
     setResult('Tu personaje espera a salvo en la retaguardia. La mesa sigue sin ti; cuando vuelvas, pulsa «Volver al frente».');
     playSound('page');
   }
@@ -453,170 +338,72 @@ export default function Play({ world, characters, schemaOk, playerName, onCharac
     if (!combat) return;
     let next = combat;
     for (const item of mineAway) next = rejoin(next, item.ref_id) ?? next;
-    if (next === combat || !await persistCombat(next)) return;
+    if (next === combat || !await combatActions.persistCombat(next)) return;
     setResult('Has vuelto al frente. Actuarás cuando llegue tu turno.');
     playSound('select');
   }
 
-  // Retirada automática: si un jugador lleva un rato desconectado, cualquier
-  // pestaña que siga en la mesa pone a su personaje a salvo. Si dos lo intentan
-  // a la vez, solo se guarda una vez y la otra se actualiza en silencio.
-  useEffect(() => {
-    if (!combat?.active || !presenceConnected) return;
-    const check = async () => {
-      if (writeInProgress.current) return;
-      const overdue = overdueAbsences(combat.combatants);
-      if (!overdue.length) return;
-      let next = combat;
-      for (const refId of overdue) next = withdraw(next, refId, true) ?? next;
-      if (next === combat) return;
-      writeInProgress.current = true;
-      try { await persistCombat(next, undefined, undefined, true); } catch { /* Se reintenta en la próxima comprobación. */ } finally { writeInProgress.current = false; }
-    };
-    const timer = window.setInterval(() => { void check(); }, 5000);
-    return () => window.clearInterval(timer);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [combat, presenceConnected, presentNames, ownerById]);
-
-  async function pcAttack(target: Combatant) {
-    if (!combat || !activeChar) return;
-    const turn = currentTurn();
-    if (!turn || turn.kind !== 'pc') return;
-    const attacker = characters.find((character) => character.id === turn.ref_id);
-    if (!attacker || attacker.status !== 'vivo' || turn.hp <= 0 || turn.away) return;
-    const weapon = WEAPONS.find((w) => w.name === attacker.weapon) ?? WEAPONS[0];
-    const mod = abilityMod(attacker.str);
+  async function deathSave(char: CharacterRow) {
+    const saves = readDeathSaves(char.notes);
+    if (!schemaOk || char.status !== 'vivo' || char.hp > 0 || saves.successes >= 3 || saves.failures >= 3 || deathSaveInProgress.current.has(char.id)) return;
+    deathSaveInProgress.current.add(char.id);
+    setDeathSavePending((previous) => new Set(previous).add(char.id));
     const d20 = rollDie(20);
-    const attack = d20 + proficiencyBonus(attacker.level) + mod;
-    let logLine = '';
-    let damage = 0;
-    const combatants = combat.combatants.map((combatant) => ({ ...combatant }));
-    if (attack >= target.ac) {
-      const { total: rolledDamage, detail } = parseAndRoll(`${weapon.dice}${mod >= 0 ? '+' : ''}${mod}`);
-      damage = Math.max(0, rolledDamage);
-      const t = combatants.find((c) => c.ref_id === target.ref_id);
-      if (t) t.hp = Math.max(0, t.hp - damage);
-      logLine = `${attacker.name} ataca a ${target.name} con ${weapon.name}: saca ${d20} + bono = ${attack} contra defensa ${target.ac}. ¡Le pega! Daño ${damage} (${detail}).`;
+    try {
+      const resolution = resolveDeathSave(saves, d20);
+      const nextNotes = resolution.recovered ? clearDeathSaves(char.notes) : writeDeathSaves(char.notes, resolution.saves);
+      let query = supabase.from('characters')
+        .update({ hp: resolution.recovered ? 1 : 0, notes: nextNotes })
+        .eq('id', char.id).eq('status', 'vivo').eq('hp', 0);
+      query = char.notes === null ? query.is('notes', null) : query.eq('notes', char.notes);
+      const { data, error } = await query.select('id').maybeSingle();
+      if (error || !data) {
+        setResult(error
+          ? 'No se pudo guardar la tirada. Revisa la conexión y el estado actual del personaje.'
+          : 'La hoja cambió en otra sesión. Se actualizó la compañía; revisa antes de volver a tirar.');
+        onCharactersChange();
+        return;
+      }
+      const msg = resolution.recovered
+        ? `¡Un 20! ${char.name} se levanta con 1 punto de vida. ¡Está de vuelta!`
+        : d20 === 1
+          ? `Un 1… mala suerte: ${char.name} suma dos fallos. Lleva ${resolution.saves.failures} de 3 fallos.`
+          : d20 >= 10
+            ? `${char.name} saca ${d20}: un éxito. Lleva ${resolution.saves.successes} de 3 éxitos.`
+            : `${char.name} saca ${d20}: un fallo. Lleva ${resolution.saves.failures} de 3 fallos.`;
+      setResult(resolution.recovered
+        ? msg
+        : resolution.saves.successes >= 3
+          ? `${msg} ¡Se estabiliza! ${char.name} no muere, pero sigue inconsciente hasta que alguien lo cure.`
+          : resolution.saves.failures >= 3
+            ? `${char.name} ha acumulado tres fallos. Registra su caída para que el mundo lo recuerde.`
+            : msg);
+      if (resolution.saves.failures >= 3) setFallForm(char.id);
       await saveRoll({
         world_id: world?.id ?? null,
         player_name: playerName,
-        character_name: attacker.name,
-        label: `Ataque de ${attacker.name} a ${target.name}`,
-        dice: `1d20+${proficiencyBonus(attacker.level) + mod}`,
-        result: attack,
-        detail: `Dado ${d20} · defensa enemiga ${target.ac}`,
+        character_name: char.name,
+        label: `Tirada para no morir de ${char.name}`,
+        dice: '1d20',
+        result: d20,
+        detail: msg,
       });
-    } else {
-      logLine = `${attacker.name} ataca a ${target.name}: saca ${d20} + bono = ${attack} contra defensa ${target.ac}. ¡No le pega!`;
-    }
-    const attackEvent: CombatAttackEvent = {
-      type: 'jth.attack.v1', id: crypto.randomUUID(), at: new Date().toISOString(),
-      attacker: attacker.name, target: target.name, attackerKind: 'pc',
-      hit: attack >= target.ac, damage, message: logLine,
-    };
-    await persistCombat({ ...combat, combatants }, attackEvent, turn.ref_id);
-  }
-
-  async function enemyAttack() {
-    if (!combat || !adventure) return;
-    const turn = currentTurn();
-    if (!turn || turn.kind !== 'enemy' || turn.hp <= 0) return;
-    const encounter = adventures.find((item) => item.id === combat.adventure_id) ?? adventure;
-    const enemy = encounter.enemies.find((e) => e.name === turn.name) ?? encounter.enemies[0];
-    const targets = enemyTargets(combat.combatants);
-    if (targets.length === 0) {
-      setResult('No hay nadie a su alcance: quienes quedan están en la retaguardia. Pasa al siguiente turno.');
-      return;
-    }
-    const target = targets[Math.floor(Math.random() * targets.length)];
-    const d20 = rollDie(20);
-    const attack = d20 + (enemy?.attack_bonus ?? 2);
-    const combatants = combat.combatants.map((combatant) => ({ ...combatant }));
-    let logLine = '';
-    let damage = 0;
-    let nextHp = target.hp;
-    if (attack >= target.ac) {
-      const { total: rolledDamage, detail } = parseAndRoll(enemy?.damage_dice ?? '1d6');
-      damage = Math.max(0, rolledDamage);
-      nextHp = Math.max(0, target.hp - damage);
-      const targetCopy = combatants.find((c) => c.ref_id === target.ref_id);
-      if (targetCopy) targetCopy.hp = nextHp;
-      logLine = `${turn.name} ataca a ${target.name}: saca ${d20} + bono = ${attack} contra defensa ${target.ac}. ¡Le pega! Daño ${damage} (${detail}). ${target.name} queda con ${nextHp} de vida.`;
-    } else {
-      logLine = `${turn.name} ataca a ${target.name}: saca ${d20} + bono = ${attack} contra defensa ${target.ac}. ¡No le pega!`;
-    }
-    const attackEvent: CombatAttackEvent = {
-      type: 'jth.attack.v1', id: crypto.randomUUID(), at: new Date().toISOString(),
-      attacker: turn.name, target: target.name, attackerKind: 'enemy',
-      hit: attack >= target.ac, damage, message: logLine,
-    };
-    if (!await persistCombat({ ...combat, combatants }, attackEvent, turn.ref_id)) return;
-    // The copied combatant and character sheet receive exactly the same damage.
-    if (attack >= target.ac && schemaOk) {
-      const { error } = await supabase.from('characters').update({ hp: nextHp })
-        .eq('id', target.ref_id).eq('status', 'vivo').select('id').single();
-      if (error) setResult('El golpe se guardó en el combate, pero la hoja no pudo actualizarse. Revisa la vida del personaje en Personajes.');
       onCharactersChange();
-    }
-  }
-
-  async function deathSave(char: CharacterRow) {
-    if (char.status !== 'vivo' || char.hp > 0) return;
-    const d20 = rollDie(20);
-    const saves = deathSaves[char.id] ?? { ok: 0, fail: 0 };
-    let next = { ...saves };
-    let msg = '';
-    if (d20 === 20) {
-      next = { ok: 3, fail: 0 };
-      msg = `¡Un 20! ${char.name} se levanta con 1 punto de vida. ¡Está de vuelta!`;
-      if (schemaOk) {
-        const { error } = await supabase.from('characters').update({ hp: 1 }).eq('id', char.id).eq('status', 'vivo').eq('hp', 0).select('id').single();
-        if (error) {
-          setResult('La hoja cambió o no se pudo guardar la tirada. Revisa el estado del personaje antes de continuar.');
-          onCharactersChange();
-          return;
-        }
-        onCharactersChange();
-      }
-    } else if (d20 === 1) {
-      next = { ...saves, fail: saves.fail + 2 };
-      msg = `Un 1… mala suerte: ${char.name} suma dos fallos. Lleva ${next.fail} de 3 fallos.`;
-    } else if (d20 >= 10) {
-      next = { ...saves, ok: saves.ok + 1 };
-      msg = `${char.name} saca ${d20}: un éxito. Lleva ${next.ok} de 3 éxitos.`;
-    } else {
-      next = { ...saves, fail: saves.fail + 1 };
-      msg = `${char.name} saca ${d20}: un fallo. Lleva ${next.fail} de 3 fallos.`;
-    }
-    setDeathSaves({ ...deathSaves, [char.id]: next });
-    setResult(msg);
-    await saveRoll({
-      world_id: world?.id ?? null,
-      player_name: playerName,
-      character_name: char.name,
-      label: `Tirada para no morir de ${char.name}`,
-      dice: '1d20',
-      result: d20,
-      detail: msg,
-    });
-    if (next.ok >= 3) {
-      setResult(`${msg} ¡Se estabiliza! ${char.name} no muere, pero sigue inconsciente hasta que alguien lo cure.`);
-    }
-    if (next.fail >= 3) {
-      setResult(`${char.name} ha caído. Registra su caída para que el mundo lo recuerde.`);
-      setFallForm(char.id);
+    } finally {
+      deathSaveInProgress.current.delete(char.id);
+      setDeathSavePending((previous) => { const next = new Set(previous); next.delete(char.id); return next; });
     }
   }
 
   async function registerFall(char: CharacterRow) {
     if (!schemaOk) return;
-    const { error } = await supabase
+    let query = supabase
       .from('characters')
-      .update({ status: 'caido', hp: 0, death_note: `Cayó en ${adventure?.name ?? 'el mundo'}.` })
-      .eq('id', char.id).eq('status', 'vivo')
-      .select('id')
-      .single();
-    if (error) {
+      .update({ status: 'caido', hp: 0, death_note: `Cayó en ${adventure?.name ?? 'el mundo'}.`, notes: clearDeathSaves(char.notes) })
+      .eq('id', char.id).eq('status', 'vivo').eq('hp', 0);
+    query = char.notes === null ? query.is('notes', null) : query.eq('notes', char.notes);
+    const { data, error } = await query.select('id').maybeSingle();
+    if (error || !data) {
       setResult('No se pudo registrar la caída. Inténtalo de nuevo.');
       playSound('failure');
       return;
@@ -782,8 +569,10 @@ export default function Play({ world, characters, schemaOk, playerName, onCharac
           <CombatBoard combat={combat} characters={characters} art={scene ? sceneArtwork(adventure?.name ?? '', scene.place) : undefined} busy={combatPending}
             onMove={(refId, x, y) => void runCombatAction(async () => {
               const next = moveCombatant(combat, refId, x, y, COMBAT_COLS, COMBAT_ROWS);
-              if (next && await persistCombat(next)) playSound('move');
-            })} />
+              if (next && await combatActions.persistCombat(next)) playSound('move');
+            })}
+            onAttack={(attackerRefId, targetRefId) => void runCombatAction(() => pcAttack(targetRefId, attackerRefId))}
+            onEnemyAttack={(enemyRefId) => void runCombatAction(() => enemyAttack(enemyRefId))} />
           <div className="combatants">
             {combat.combatants.map((c, i) => (
               <div key={c.ref_id} className={`combatant ${i === combat.turn_index % combat.combatants.length ? 'active-turn' : ''} ${c.hp <= 0 ? 'down' : ''} ${c.away ? 'away' : ''}`}>
@@ -817,7 +606,7 @@ export default function Play({ world, characters, schemaOk, playerName, onCharac
           {turn?.kind === 'pc' && turn.away && (
             <div>
               <h3>{turn.name} está en la retaguardia</h3>
-              <button className="btn btn-primary" disabled={combatPending} onClick={() => runCombatAction(nextTurn)}>Siguiente turno →</button>
+              <button className="btn btn-primary" disabled={combatPending} onClick={() => runCombatAction(nextTurn)}>Pasar turno →</button>
             </div>
           )}
           {turn?.kind === 'pc' && !turn.away && (
@@ -825,22 +614,22 @@ export default function Play({ world, characters, schemaOk, playerName, onCharac
               <h3>Tu turno, {turn.name}</h3>
               <div className="grid-actions">
                 {combat.combatants.filter((c) => c.kind === 'enemy' && c.hp > 0).map((e) => (
-                  <button key={e.ref_id} className="btn btn-action" disabled={combatPending} onClick={() => runCombatAction(() => pcAttack(e))}>
+                  <button key={e.ref_id} className="btn btn-action" disabled={combatPending} onClick={() => runCombatAction(() => pcAttack(e.ref_id, turn.ref_id))}>
                     Atacar a {e.name}
                   </button>
                 ))}
                 <button className="btn" onClick={() => setResult(`${turn.name} se defiende: hasta su próximo turno, los ataques contra él tienen desventaja.`)}>
                   Defenderme
                 </button>
-                <button className="btn btn-primary" disabled={combatPending} onClick={() => runCombatAction(nextTurn)}>Siguiente turno →</button>
+                <button className="btn btn-primary" disabled={combatPending} onClick={() => runCombatAction(nextTurn)}>Pasar turno →</button>
               </div>
             </div>
           )}
           {turn?.kind === 'enemy' && (
             <div>
               <h3>Turno del enemigo: {turn.name}</h3>
-              <button className="btn btn-danger" disabled={combatPending} onClick={() => runCombatAction(enemyAttack)}>Que ataque</button>
-              <button className="btn btn-primary" disabled={combatPending} onClick={() => runCombatAction(nextTurn)}>Siguiente turno →</button>
+              <button className="btn btn-danger" disabled={combatPending} onClick={() => runCombatAction(() => enemyAttack(turn.ref_id))}>Que ataque</button>
+              <button className="btn btn-primary" disabled={combatPending} onClick={() => runCombatAction(nextTurn)}>Pasar turno →</button>
             </div>
           )}
 
@@ -857,12 +646,16 @@ export default function Play({ world, characters, schemaOk, playerName, onCharac
 
       {/* Personajes a 0 de vida: tirada para no morir */}
       {dying.map((c) => {
-        const saves = deathSaves[c.id] ?? { ok: 0, fail: 0 };
+        const saves = readDeathSaves(c.notes);
+        const terminal = saves.successes >= 3 || saves.failures >= 3;
+        const saving = deathSavePending.has(c.id);
         return (
           <div key={c.id} className="card danger-card">
             <h3>{c.name} está a 0 de vida</h3>
-            <p>Éxitos: {saves.ok}/3 · Fallos: {saves.fail}/3. Saca 10 o más para un éxito. Un 20 te levanta con 1 de vida. Un 1 son dos fallos.</p>
-            <button className="btn btn-danger" onClick={() => deathSave(c)}>Tirar para no morir</button>
+            <p>Éxitos: {saves.successes}/3 · Fallos: {saves.failures}/3. Saca 10 o más para un éxito. Un 20 te levanta con 1 de vida. Un 1 son dos fallos.</p>
+            <button className="btn btn-danger" disabled={!schemaOk || terminal || saving} onClick={() => void deathSave(c)}>
+              {saving ? 'Guardando tirada…' : saves.successes >= 3 ? 'Estable; espera curación' : saves.failures >= 3 ? 'Registra la caída' : 'Tirar para no morir'}
+            </button>
           </div>
         );
       })}

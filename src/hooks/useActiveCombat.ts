@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { supabase, type CombatRow } from '../lib/supabase';
 
 /** El combate abierto en la mesa, actualizado en vivo. */
-export function useActiveCombat(worldId: string | null | undefined, enabled: boolean): [CombatRow | null, (row: CombatRow) => void] {
+export function useActiveCombat(worldId: string | null | undefined, enabled: boolean): [CombatRow | null, (row: CombatRow | null) => void] {
   const [state, setState] = useState<{ worldId: string; combat: CombatRow | null } | null>(null);
   useEffect(() => {
     if (!enabled || !worldId) return;
@@ -32,7 +32,10 @@ export function useActiveCombat(worldId: string | null | undefined, enabled: boo
     };
   }, [worldId, enabled]);
   const combat = enabled && state && state.worldId === worldId ? state.combat : null;
-  return [combat, (row) => { if (worldId) setState({ worldId, combat: row.active ? row : null }); }];
+  const updateCombat = useCallback((row: CombatRow | null) => {
+    if (worldId) setState({ worldId, combat: row?.active ? row : null });
+  }, [worldId]);
+  return [combat, updateCombat];
 }
 
 /**
@@ -42,7 +45,14 @@ export function useActiveCombat(worldId: string | null | undefined, enabled: boo
 export async function saveCombatMove(previous: CombatRow, next: CombatRow): Promise<CombatRow | null> {
   const before = Date.parse(previous.updated_at) || 0;
   const { data, error } = await supabase.from('combat')
-    .update({ combatants: next.combatants, updated_at: new Date(Math.max(Date.now(), before + 1)).toISOString() })
-    .eq('id', previous.id).eq('active', true).eq('updated_at', previous.updated_at).select('*').maybeSingle();
+    .update({
+      combatants: next.combatants,
+      round: next.round,
+      turn_index: next.turn_index,
+      log: next.log,
+      active: next.active,
+      updated_at: new Date(Math.max(Date.now(), before + 1)).toISOString(),
+    })
+    .eq('id', previous.id).eq('world_id', previous.world_id).eq('active', true).eq('updated_at', previous.updated_at).select('*').maybeSingle();
   return error || !data ? null : data as CombatRow;
 }

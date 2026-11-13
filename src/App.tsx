@@ -18,8 +18,10 @@ import WorldActivity from './components/WorldActivity';
 import CombatEffects from './components/CombatEffects';
 import CharacterPortrait from './components/CharacterPortrait';
 import { readAppearance } from './lib/appearance';
+import { clearDeathSaves } from './lib/deathSaves.ts';
 import { useSession } from './hooks/useSession';
 import { useTablePresence } from './hooks/useTablePresence';
+import { useCombatAbsenceGuard } from './hooks/useCombatAbsenceGuard';
 import './LivingShell.css';
 
 const CharacterCreator = lazy(() => import('./components/CharacterCreator'));
@@ -57,6 +59,13 @@ export default function App() {
   const session = useSession(world?.id, schemaOk);
   const presence = useTablePresence(world?.id, schemaOk, playerName, role);
   const presentNames = useMemo(() => presence.members.map((member) => member.name), [presence.members]);
+  const { overdueCharacterIds } = useCombatAbsenceGuard({
+    worldId: world?.id,
+    schemaOk,
+    characters,
+    presentNames,
+    presenceConnected: presence.connected,
+  });
   const sharedScene = session.cue?.payload.active ? { id: session.cue.id, ...session.cue.payload } : null;
   useEffect(() => {
     const onVisibility = () => setPageHidden(document.hidden);
@@ -97,8 +106,11 @@ export default function App() {
     const next = Math.max(0, Math.min(c.max_hp, c.hp + delta));
     if (!schemaOk) return;
     if (c.status !== 'vivo') return;
-    const { error } = await supabase.from('characters').update({ hp: next }).eq('id', c.id).eq('status', 'vivo').eq('hp', c.hp).select('id').single();
-    if (error) {
+    let query = supabase.from('characters').update(next > 0 ? { hp: next, notes: clearDeathSaves(c.notes) } : { hp: next })
+      .eq('id', c.id).eq('status', 'vivo').eq('hp', c.hp);
+    if (next > 0) query = c.notes === null ? query.is('notes', null) : query.eq('notes', c.notes);
+    const { data, error } = await query.select('id').maybeSingle();
+    if (error || !data) {
       setHpFlash('No se pudo guardar la vida. Actualiza la hoja e inténtalo de nuevo.');
       void fetchAll();
       return;
@@ -216,8 +228,7 @@ export default function App() {
               playerName={playerName}
               onCharactersChange={fetchAll}
               sharedScene={sharedScene}
-              presentNames={presentNames}
-              presenceConnected={presence.connected}
+              overdueCharacterIds={overdueCharacterIds}
               onCreateCharacter={openCreator}
               onOpenMap={() => navigate('mapa')}
             />
@@ -334,7 +345,7 @@ export default function App() {
         )}
 
         <Suspense fallback={<p role="status">Cargando sección…</p>}>
-          {tab === 'infernalista' && <Infernalista world={world} characters={characters} schemaOk={schemaOk} playerName={playerName} onOpenMap={() => navigate('mapa')} onOpenPlay={() => navigate('jugar')} />}
+          {tab === 'infernalista' && <Infernalista world={world} characters={characters} schemaOk={schemaOk} playerName={playerName} overdueCharacterIds={overdueCharacterIds} onOpenMap={() => navigate('mapa')} onOpenPlay={() => navigate('jugar')} />}
           {tab === 'mundo' && <WorldPanel world={world} schemaOk={schemaOk} playerName={playerName} />}
 
           {tab === 'mapa' && (
@@ -342,8 +353,9 @@ export default function App() {
               worldId={world?.id ?? null}
               characters={characters}
               schemaOk={schemaOk}
+              playerName={playerName}
+              onCharactersChange={fetchAll}
               mapaInicial={mapaAtlas}
-              onOpenPlay={() => navigate('jugar')}
             />
           )}
 
