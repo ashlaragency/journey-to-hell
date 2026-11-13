@@ -342,8 +342,9 @@ export default function App() {
               worldId={world?.id ?? null}
               characters={characters}
               schemaOk={schemaOk}
+              playerName={playerName}
+              onCharactersChange={fetchAll}
               mapaInicial={mapaAtlas}
-              onOpenPlay={() => navigate('jugar')}
             />
           )}
 

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { supabase, type CombatRow } from '../lib/supabase';
 
 /** El combate abierto en la mesa, actualizado en vivo. */
-export function useActiveCombat(worldId: string | null | undefined, enabled: boolean): [CombatRow | null, (row: CombatRow) => void] {
+export function useActiveCombat(worldId: string | null | undefined, enabled: boolean): [CombatRow | null, (row: CombatRow | null) => void] {
   const [state, setState] = useState<{ worldId: string; combat: CombatRow | null } | null>(null);
   useEffect(() => {
     if (!enabled || !worldId) return;
@@ -32,7 +32,7 @@ export function useActiveCombat(worldId: string | null | undefined, enabled: boo
     };
   }, [worldId, enabled]);
   const combat = enabled && state && state.worldId === worldId ? state.combat : null;
-  return [combat, (row) => { if (worldId) setState({ worldId, combat: row.active ? row : null }); }];
+  return [combat, (row) => { if (worldId) setState({ worldId, combat: row?.active ? row : null }); }];
 }
 
 /**

@@ -16,14 +16,18 @@ interface CombatBoardProps {
   art?: string;
   busy?: boolean;
   onMove?: (refId: string, x: number, y: number) => void;
+  onAttack?: (attackerRefId: string, targetRefId: string) => void;
+  onEnemyAttack?: (enemyRefId: string) => void;
 }
 
 const HERO_COLORS = ['#7b1fa2', '#1565c0', '#2e7d32', '#ef6c00', '#00838f', '#c62828'];
 
-export default function CombatBoard({ combat, characters, art, busy = false, onMove }: CombatBoardProps) {
+export default function CombatBoard({ combat, characters, art, busy = false, onMove, onAttack, onEnemyAttack }: CombatBoardProps) {
   const pieces = useMemo(() => layoutCombat(combat.combatants, combat.turn_index, COMBAT_COLS, COMBAT_ROWS), [combat.combatants, combat.turn_index]);
   const [selected, setSelected] = useState<string | null>(null);
   const picked = pieces.find((piece) => piece.refId === selected && !piece.away) ?? null;
+  const turn = pieces.find((piece) => piece.turn);
+  const actingHeroSelected = !!(turn?.kind === 'pc' && !turn.down && !turn.away && picked?.kind === 'pc' && picked.refId === turn.refId);
 
   // El golpe recién guardado se ve sobre las fichas durante un momento.
   const attack = useMemo(() => latestAttack(combat), [combat]);
@@ -36,7 +40,6 @@ export default function CombatBoard({ combat, characters, art, busy = false, onM
   }, [attackId]);
   const flash = attack && attackId && attackId !== finished ? attack : null;
 
-  const turn = pieces.find((piece) => piece.turn);
   const heroIndex = new Map(pieces.filter((piece) => piece.kind === 'pc').map((piece, index) => [piece.refId, index]));
 
   return (
@@ -50,15 +53,20 @@ export default function CombatBoard({ combat, characters, art, busy = false, onM
               const y = Math.floor(index / COMBAT_COLS);
               const piece = pieces.find((item) => item.x === x && item.y === y);
               const isPicked = !!piece && piece.refId === picked?.refId;
+              const canAttack = !!(piece && actingHeroSelected && piece.kind === 'enemy' && !piece.down && onAttack);
               const struck = !!flash && piece?.name === flash.target;
               const striking = !!flash && piece?.name === flash.attacker;
-              const state = !piece ? 'vacía' : `${piece.name}, ${piece.hp} de ${piece.max_hp} de vida${piece.away ? ', en la retaguardia' : piece.down ? ', fuera de combate' : piece.turn ? ', tiene el turno' : ''}`;
+              const state = !piece ? 'vacía' : `${piece.name}, ${piece.hp} de ${piece.max_hp} de vida${piece.away ? ', en la retaguardia' : piece.down ? ', fuera de combate' : piece.turn ? ', tiene el turno' : ''}${canAttack ? ', objetivo disponible' : ''}`;
               const character = piece?.kind === 'pc' ? characters.find((item) => item.id === piece.refId) : undefined;
-              return <button key={`${x}-${y}`} type="button" disabled={busy && !piece}
-                className={`battle-cell ${x === 0 ? 'battle-cell-rear' : ''} ${piece ? 'battle-cell-occupied' : ''} ${isPicked ? 'battle-cell-selected' : ''} ${picked && !piece && x > 0 ? 'battle-cell-reachable' : ''}`}
+              return <button key={`${x}-${y}`} type="button" disabled={busy}
+                className={`battle-cell ${x === 0 ? 'battle-cell-rear' : ''} ${piece ? 'battle-cell-occupied' : ''} ${isPicked ? 'battle-cell-selected' : ''} ${picked && !piece && x > 0 ? 'battle-cell-reachable' : ''} ${canAttack ? 'battle-cell-enemy-target' : ''}`}
                 aria-pressed={isPicked} aria-label={`Casilla ${x + 1}, ${y + 1}: ${state}`} title={piece ? `${piece.name} · ${piece.hp}/${piece.max_hp} vida${piece.away ? ' · En la retaguardia' : ''}` : undefined}
                 onClick={() => {
-                  if (piece) { setSelected(isPicked || piece.away ? null : piece.refId); return; }
+                  if (piece) {
+                    if (canAttack && picked && onAttack) { onAttack(picked.refId, piece.refId); setSelected(null); return; }
+                    setSelected(isPicked || piece.away ? null : piece.refId);
+                    return;
+                  }
                   if (picked && onMove && x > 0) { onMove(picked.refId, x, y); setSelected(null); }
                 }}>
                 {piece && <span className={`battle-miniature ${piece.kind === 'enemy' ? 'battle-miniature-enemy' : 'battle-miniature-hero'} ${piece.down ? 'battle-miniature-down' : ''} ${piece.away ? 'battle-miniature-away' : ''} ${piece.turn && !piece.down && !piece.away ? 'battle-miniature-turn' : ''} ${struck ? (flash.hit ? 'battle-miniature-struck' : 'battle-miniature-dodged') : ''} ${striking ? 'battle-miniature-striking' : ''}`}
@@ -75,7 +83,8 @@ export default function CombatBoard({ combat, characters, art, busy = false, onM
         </div>
       </div>
       <div className="battle-board-caption">
-        <span>{picked ? `Elige una casilla libre para mover a ${picked.name}.` : onMove ? 'Toca una ficha y después su destino.' : 'La mesa ve la pelea en directo.'}</span>
+        <span>{actingHeroSelected ? 'Toca una criatura resaltada para atacarla, o una casilla libre para moverte.' : picked ? `Elige una casilla libre para mover a ${picked.name}.` : onMove ? 'Toca una ficha y después su destino.' : 'La mesa ve la pelea en directo.'}</span>
+        {turn?.kind === 'enemy' && onEnemyAttack && <button className="btn btn-danger" disabled={busy} onClick={() => onEnemyAttack(turn.refId)}>Que ataque {turn.name}</button>}
         <span>La columna izquierda es la retaguardia</span>
       </div>
     </section>

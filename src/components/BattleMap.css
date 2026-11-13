@@ -141,6 +141,8 @@
 .enchanted-battle.combat-board .battle-table-scroll { max-height: none; }
 .enchanted-battle .battle-grid-illustrated .battle-cell-rear, .enchanted-battle .battle-cell-rear { background: #0c0f14a8; border-color: #9fb4c633; }
 .enchanted-battle .battle-cell-reachable:hover { background: #e7c68a55; box-shadow: inset 0 0 0 2px #ffe2a1; }
+.enchanted-battle .battle-cell-enemy-target { background: #a9473538; box-shadow: inset 0 0 0 2px #ed8566; }
+.enchanted-battle .battle-cell-enemy-target .battle-miniature { border-color: #ffb09a; box-shadow: 0 5px 0 #3d1b16, 0 0 0 3px #f27d5b70, 0 0 20px #e45f3c99; }
 .enchanted-battle .battle-miniature-away { opacity: .5; border-style: dashed; filter: saturate(.4); box-shadow: 0 3px 6px #0008; }
 .enchanted-battle .battle-miniature-turn { border-color: #ffe9a8; box-shadow: 0 5px 0 #3d2912, 0 6px 0 #c29b5a, 0 9px 12px #000b, 0 0 0 3px #ffd98055, 0 0 22px #ffcf70aa; }
 .enchanted-battle .battle-miniature-turn::before { content: ''; position: absolute; inset: -8px; border-radius: 50%; border: 2px solid #ffdf98; animation: miniature-ring 1.8s ease-in-out infinite; pointer-events: none; }
