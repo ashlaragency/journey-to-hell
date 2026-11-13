@@ -16,6 +16,8 @@ import {
 } from '../lib/supabase';
 import { ADVENTURES_SEED } from '../lib/compendium';
 import MonsterPortrait from './MonsterPortrait';
+import CharacterPortrait from './CharacterPortrait';
+import { readAppearance } from '../lib/appearance';
 import {
   SKILLS,
   WEAPONS,
@@ -125,6 +127,7 @@ export default function Play({ world, characters, schemaOk, playerName, onCharac
     () => living.find((c) => c.id === charId) ?? living[0] ?? null,
     [living, charId],
   );
+  const characterById = useMemo(() => new Map(characters.map((character) => [character.id, character])), [characters]);
   const selectedAdventureId = sharedScene?.adventureId ?? advId;
   const adventure = useMemo(
     () => adventures.find((a) => a.id === selectedAdventureId) ?? (sharedScene ? null : adventures[0]) ?? null,
@@ -630,7 +633,7 @@ export default function Play({ world, characters, schemaOk, playerName, onCharac
               <div className="chapter-track" aria-hidden="true">{(adventure?.scenes ?? [scene]).map((_, index) => <i key={index} className={index <= currentSceneIndex ? 'chapter-reached' : ''} />)}</div>
             </div>
             {activeChar ? <div className="stage-character">
-              <span className="character-avatar" aria-hidden="true">{activeChar.name.charAt(0)}</span>
+              <CharacterPortrait species={activeChar.species} profession={activeChar.class_name} appearance={readAppearance(activeChar.notes)} name={activeChar.name} compact decorative className="character-avatar stage-character-portrait" />
               <div><b>{activeChar.name}</b><span>{activeChar.class_name} · Nivel {activeChar.level}</span></div>
               <div className="stage-health"><b>{activeChar.hp}<small> / {activeChar.max_hp}</small></b><span>Vida · Defensa {activeChar.ac}</span></div>
             </div> : <span className="stage-invitation">El mundo espera tu primera decisión.</span>}
@@ -702,9 +705,12 @@ export default function Play({ world, characters, schemaOk, playerName, onCharac
               <div key={c.ref_id} className={`combatant ${i === combat.turn_index % combat.combatants.length ? 'active-turn' : ''} ${c.hp <= 0 ? 'down' : ''}`}>
                 {c.kind === 'enemy' ? (
                   <MonsterPortrait name={c.name} className="combat-portrait" />
-                ) : (
-                  <span className="character-avatar" aria-hidden="true">{c.name.charAt(0)}</span>
-                )}
+                ) : (() => {
+                  const character = characterById.get(c.ref_id);
+                  return character
+                    ? <CharacterPortrait species={character.species} profession={character.class_name} appearance={readAppearance(character.notes)} weapon={character.weapon} armor={character.armor} shield={character.shield} pack={character.pack} name={character.name} compact decorative className="character-avatar combat-portrait-character" />
+                    : <span className="character-avatar" aria-hidden="true">{c.name.charAt(0)}</span>;
+                })()}
                 <div className="combatant-info">
                   <b>{c.name}</b>
                   <span>Vida {Math.max(0, c.hp)}/{c.max_hp} · Defensa {c.ac}</span>

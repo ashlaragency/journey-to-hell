@@ -1,0 +1,167 @@
+.character-portrait {
+  --portrait-ink: #29221d;
+  position: relative;
+  display: block;
+  isolation: isolate;
+  width: 100%;
+  min-width: 112px;
+  aspect-ratio: 4 / 5;
+  overflow: hidden;
+  border: 1px solid rgba(210, 169, 111, .42);
+  border-radius: 16px;
+  background:
+    radial-gradient(ellipse at 50% 38%, rgba(211, 165, 113, .16), transparent 60%),
+    linear-gradient(150deg, #27211f 0%, #100f12 66%, #1b1516 100%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 10px 30px rgba(9,7,8,.32);
+}
+
+.portrait-costume,
+.portrait-head,
+.portrait-hair {
+  position: absolute;
+  background-repeat: no-repeat;
+  background-size: 200% 200%;
+  pointer-events: none;
+}
+
+.portrait-costume {
+  z-index: 1;
+  width: 118%;
+  aspect-ratio: 1;
+  left: -9%;
+  top: 36%;
+  filter: drop-shadow(0 10px 8px rgba(0,0,0,.28));
+}
+
+.portrait-head {
+  z-index: 2;
+  width: 64%;
+  aspect-ratio: 1;
+  left: 18%;
+  top: -1%;
+  filter: drop-shadow(0 6px 5px rgba(0,0,0,.2));
+}
+
+.portrait-hair {
+  z-index: 3;
+  width: 64%;
+  aspect-ratio: 1;
+  left: 18%;
+  top: -1%;
+  pointer-events: none;
+}
+
+/* El hocico del dracónico y el pico aviar ocupan algo más de espacio en el atlas. */
+.portrait-species-draconico .portrait-head { width: 71%; left: 14.5%; top: 0; }
+.portrait-species-draconico .portrait-hair { width: 71%; left: 14.5%; top: 0; }
+.portrait-species-aarakocra .portrait-head,
+.portrait-species-kenku .portrait-head { width: 69%; left: 15.5%; top: 0; }
+.portrait-species-aarakocra .portrait-hair,
+.portrait-species-kenku .portrait-hair { width: 69%; left: 15.5%; top: 0; }
+.portrait-species-tabaxi .portrait-head,
+.portrait-species-minotauro .portrait-head { width: 67%; left: 16.5%; }
+.portrait-species-tabaxi .portrait-hair,
+.portrait-species-minotauro .portrait-hair { width: 67%; left: 16.5%; }
+.portrait-species-hada .portrait-head { width: 57%; left: 21.5%; top: 2%; }
+.portrait-species-hada .portrait-hair { width: 57%; left: 21.5%; top: 2%; }
+
+.portrait-equipment-art {
+  position: absolute;
+  z-index: 4;
+  display: grid;
+  place-items: center;
+  width: 52px;
+  min-height: 58px;
+  padding: 5px 3px 3px;
+  color: #e4c18e;
+  border: 1px solid rgba(217,177,121,.44);
+  border-radius: 12px;
+  background: linear-gradient(145deg, rgba(40,30,27,.94), rgba(18,16,18,.96));
+  box-shadow: 0 5px 16px rgba(0,0,0,.38), inset 0 1px 0 rgba(255,255,255,.08);
+  text-align: center;
+}
+
+.portrait-equipment-art svg {
+  width: 27px;
+  height: 27px;
+  fill: rgba(199,150,88,.14);
+  stroke: currentColor;
+  stroke-width: 1.45;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.portrait-equipment-art > span {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  color: #f4e5cd;
+  font-size: 8px;
+  line-height: 1.05;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.portrait-equipment-weapon { right: 5%; bottom: 8%; }
+.portrait-equipment-shield { left: 5%; bottom: 8%; }
+.portrait-equipment-pack { right: 5%; bottom: 26%; }
+
+.portrait-armor-tag,
+.portrait-name-tag {
+  position: absolute;
+  z-index: 5;
+  left: 50%;
+  max-width: 80%;
+  overflow: hidden;
+  padding: 4px 9px;
+  border: 1px solid rgba(213,176,125,.38);
+  border-radius: 999px;
+  background: rgba(17,15,16,.86);
+  color: #f1e0c6;
+  font: 600 9px/1.1 system-ui, sans-serif;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transform: translateX(-50%);
+}
+
+.portrait-armor-tag { bottom: 4%; }
+.portrait-name-tag { top: 6%; left: 6%; max-width: 70%; transform: none; }
+.portrait-fallback { display: none; }
+
+.character-portrait-compact {
+  width: 100%;
+  min-width: 0;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  border-color: rgba(214,177,130,.58);
+  background: radial-gradient(ellipse at 50% 45%, #42352d, #181518 70%);
+  box-shadow: 0 0 0 3px rgba(21,17,17,.65), 0 0 20px rgba(203,145,75,.13);
+}
+
+/* Keep the portrait inside each of the legacy avatar slots that now use it. */
+.character-portrait-compact.character-avatar { width: 37px; height: 43px; aspect-ratio: auto; flex: 0 0 auto; min-width: 0; }
+.living-play .stage-character .character-portrait-compact.character-avatar { width: 32px; height: 36px; }
+.infernal-initiative .character-portrait-compact.character-avatar { width: 36px; height: 42px; }
+.enchanted-battle .character-portrait-compact.battle-avatar { width: 40px; height: 40px; }
+.enchanted-battle .character-portrait-compact.battle-avatar-large { width: 58px; height: 58px; }
+.living-app .sidebar-player .character-portrait-compact.character-avatar { width: 30px; height: 36px; }
+
+.character-portrait-compact .portrait-costume,
+.character-portrait-compact .portrait-equipment-art,
+.character-portrait-compact .portrait-armor-tag,
+.character-portrait-compact .portrait-name-tag { display: none; }
+.character-portrait-compact .portrait-head { width: 100%; left: 0; top: -8%; }
+.character-portrait-compact .portrait-hair { width: 100%; left: 0; top: -8%; }
+.portrait-species-draconico.character-portrait-compact .portrait-head,
+.portrait-species-draconico.character-portrait-compact .portrait-hair { width: 108%; left: -4%; top: -5%; }
+.portrait-species-aarakocra.character-portrait-compact .portrait-head,
+.portrait-species-aarakocra.character-portrait-compact .portrait-hair,
+.portrait-species-kenku.character-portrait-compact .portrait-head,
+.portrait-species-kenku.character-portrait-compact .portrait-hair { width: 108%; left: -4%; top: -4%; }
+.portrait-species-hada.character-portrait-compact .portrait-head,
+.portrait-species-hada.character-portrait-compact .portrait-hair { width: 92%; left: 4%; top: -1%; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .character-portrait:not(.character-portrait-compact) { transition: border-color .2s ease, box-shadow .2s ease; }
+  .character-portrait:not(.character-portrait-compact):hover { border-color: rgba(237,194,123,.78); box-shadow: inset 0 1px 0 rgba(255,255,255,.1), 0 14px 34px rgba(9,7,8,.4); }
+}

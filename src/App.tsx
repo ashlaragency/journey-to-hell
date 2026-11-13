@@ -16,11 +16,14 @@ import type { MapaAtlas } from './lib/atlas';
 import GameIcon from './components/GameIcon';
 import WorldActivity from './components/WorldActivity';
 import CombatEffects from './components/CombatEffects';
+import CharacterPortrait from './components/CharacterPortrait';
+import { readAppearance } from './lib/appearance';
 import { useSession } from './hooks/useSession';
 import { useTablePresence } from './hooks/useTablePresence';
 import './LivingShell.css';
 
 const CharacterCreator = lazy(() => import('./components/CharacterCreator'));
+const AppearanceEditor = lazy(() => import('./components/AppearanceEditor'));
 const BattleMap = lazy(() => import('./components/BattleMap'));
 const Atlas = lazy(() => import('./components/Atlas'));
 const Compendium = lazy(() => import('./components/Compendium'));
@@ -48,6 +51,7 @@ export default function App() {
   const [schemaOk, setSchemaOk] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showCreator, setShowCreator] = useState(false);
+  const [editingAppearance, setEditingAppearance] = useState<string | null>(null);
   const [hpFlash, setHpFlash] = useState<string | null>(null);
   const [mapaAtlas, setMapaAtlas] = useState<MapaAtlas | null>(null);
   const session = useSession(world?.id, schemaOk);
@@ -222,7 +226,7 @@ export default function App() {
                 <ul className="party-list">
                   {living.slice(0, 4).map((character) => (
                     <li key={character.id}>
-                      <span className="character-avatar" aria-hidden="true">{character.name.slice(0, 1)}</span>
+                      <CharacterPortrait species={character.species} profession={character.class_name} appearance={readAppearance(character.notes)} name={character.name} compact decorative className="character-avatar party-character-portrait" />
                       <div><strong>{character.name}</strong><small>{character.class_name} · Nivel {character.level}</small>
                         <div className="hp-bar" role="meter" aria-label={`Vida de ${character.name}`} aria-valuenow={character.hp} aria-valuemin={0} aria-valuemax={character.max_hp}>
                           <div style={{ width: `${Math.max(0, Math.min(100, character.hp / character.max_hp * 100))}%` }} />
@@ -270,6 +274,7 @@ export default function App() {
             <div className="grid-cards">
               {characters.map((c) => (
                 <div key={c.id} className={`card char-card ${c.status === 'caido' ? 'fallen' : ''}`}>
+                  <CharacterPortrait species={c.species} profession={c.class_name} appearance={readAppearance(c.notes)} weapon={c.weapon} armor={c.armor} shield={c.shield} pack={c.pack} name={c.name} className="company-character-portrait" />
                   <h3>
                     {c.status === 'caido' ? '† ' : ''}
                     {c.name}
@@ -289,6 +294,8 @@ export default function App() {
                   <p className="hint">
                     {c.weapon ?? ''} {c.armor ? `· ${c.armor}` : ''} {c.shield ? '· con escudo' : ''}
                   </p>
+                  {c.status === 'vivo' && <button className="btn" onClick={() => setEditingAppearance((current) => current === c.id ? null : c.id)}>{editingAppearance === c.id ? 'Cerrar apariencia' : 'Cambiar peinado y color'}</button>}
+                  {editingAppearance === c.id && c.status === 'vivo' && <Suspense fallback={<p role="status">Cargando ajustes…</p>}><AppearanceEditor character={c} schemaOk={schemaOk} onSaved={() => { setEditingAppearance(null); void fetchAll(); }} onCancel={() => setEditingAppearance(null)} /></Suspense>}
                   {c.background && <p className="hint">Trasfondo: {c.background}</p>}
                   {c.personality && <p className="hint">Así es: {c.personality}</p>}
                   {c.motivation && <p className="hint">Busca: {c.motivation}</p>}

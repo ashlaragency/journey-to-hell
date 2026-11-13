@@ -5,6 +5,8 @@ import { useSession } from '../hooks/useSession';
 import { playSound } from '../lib/audio';
 import { abilityMod, rollDie } from '../lib/data';
 import MonsterPortrait from './MonsterPortrait';
+import CharacterPortrait from './CharacterPortrait';
+import { readAppearance } from '../lib/appearance';
 import './Infernalista.css';
 
 interface InfernalistaProps {
@@ -256,7 +258,7 @@ export default function Infernalista({ world, characters, schemaOk, playerName, 
         <aside className="infernal-company" aria-labelledby="director-company-title">
           <div className="infernal-section-heading"><span className="infernal-step">II</span><div><p className="infernal-eyebrow">AL OTRO LADO DE LA MESA</p><h3 id="director-company-title">La compañía <span>{living.length}</span></h3></div></div>
           {!living.length && <p className="hint">Aún no hay héroes vivos. Abre la aventura y crea el primer personaje.</p>}
-          <ul className="infernal-party-list">{living.map((character) => <li key={character.id}><span className="character-avatar" aria-hidden="true">{character.name.slice(0, 1)}</span><div><strong>{character.name}</strong><small>{character.class_name} · Nv. {character.level}</small><div className="hp-bar" role="meter" aria-label={`Vida de ${character.name}`} aria-valuemin={0} aria-valuemax={character.max_hp} aria-valuenow={Math.max(0, character.hp)}><div style={{ width: `${Math.max(0, Math.min(100, character.hp / Math.max(1, character.max_hp) * 100))}%` }} /></div></div><span className={character.hp <= 0 ? 'infernal-critical' : ''}>{character.hp}<small>/{character.max_hp}</small></span></li>)}</ul>
+          <ul className="infernal-party-list">{living.map((character) => <li key={character.id}><CharacterPortrait species={character.species} profession={character.class_name} appearance={readAppearance(character.notes)} name={character.name} compact decorative className="character-avatar infernal-party-portrait" /><div><strong>{character.name}</strong><small>{character.class_name} · Nv. {character.level}</small><div className="hp-bar" role="meter" aria-label={`Vida de ${character.name}`} aria-valuemin={0} aria-valuemax={character.max_hp} aria-valuenow={Math.max(0, character.hp)}><div style={{ width: `${Math.max(0, Math.min(100, character.hp / Math.max(1, character.max_hp) * 100))}%` }} /></div></div><span className={character.hp <= 0 ? 'infernal-critical' : ''}>{character.hp}<small>/{character.max_hp}</small></span></li>)}</ul>
           <div className="infernal-world-law"><span aria-hidden="true">†</span><p>Una sola vida.<br /><small>Los héroes caídos permanecen en la historia. Su hoja y su nombre quedan sellados.</small></p></div>
         </aside>
 
@@ -264,7 +266,10 @@ export default function Infernalista({ world, characters, schemaOk, playerName, 
           <div className="infernal-section-heading"><span className="infernal-step">III</span><div><p className="infernal-eyebrow">EL PELIGRO TIENE ROSTRO</p><h3 id="director-combat-title">{combat ? 'El encuentro está vivo' : 'Prepara el encuentro'}</h3></div></div>
           {combat ? <>
             <div className="infernal-turn"><span>RONDA {combat.round}</span><p>Actúa <strong>{turn?.name ?? 'la compañía'}</strong></p></div>
-            <ol className="infernal-initiative">{combat.combatants.map((fighter, index) => <li key={fighter.ref_id} className={`${index === combat.turn_index % combat.combatants.length ? 'is-current' : ''} ${fighter.hp <= 0 ? 'is-down' : ''}`} aria-current={index === combat.turn_index % combat.combatants.length ? 'step' : undefined}><span className="infernal-initiative-value">{fighter.initiative}</span>{fighter.kind === 'enemy' ? <MonsterPortrait name={fighter.name} /> : <span className="character-avatar" aria-hidden="true">{fighter.name.slice(0, 1)}</span>}<strong>{fighter.name}</strong><span>{Math.max(0, fighter.hp)}<small>/{fighter.max_hp} vida</small></span></li>)}</ol>
+            <ol className="infernal-initiative">{combat.combatants.map((fighter, index) => {
+              const character = fighter.kind === 'pc' ? characters.find((item) => item.id === fighter.ref_id) : undefined;
+              return <li key={fighter.ref_id} className={`${index === combat.turn_index % combat.combatants.length ? 'is-current' : ''} ${fighter.hp <= 0 ? 'is-down' : ''}`} aria-current={index === combat.turn_index % combat.combatants.length ? 'step' : undefined}><span className="infernal-initiative-value">{fighter.initiative}</span>{fighter.kind === 'enemy' ? <MonsterPortrait name={fighter.name} /> : character ? <CharacterPortrait species={character.species} profession={character.class_name} appearance={readAppearance(character.notes)} name={character.name} compact decorative className="character-avatar infernal-initiative-character" /> : <span className="character-avatar" aria-hidden="true">{fighter.name.slice(0, 1)}</span>}<strong>{fighter.name}</strong><span>{Math.max(0, fighter.hp)}<small>/{fighter.max_hp} vida</small></span></li>;
+            })}</ol>
             <div className="infernal-publish-row"><button className="btn btn-primary" disabled={!available || !!combatError || !combat.combatants.some((fighter) => fighter.hp > 0)} onClick={() => void changeTurn()}>Siguiente turno →</button><button className="btn" onClick={onOpenPlay}>Resolver acciones</button></div>
             {!confirmEnd ? <button className="infernal-text-button" disabled={!available || !!combatError} onClick={() => setConfirmEnd(true)}>Cerrar encuentro</button> : <div className="infernal-confirm"><p>El encuentro terminará para toda la mesa. La vida de los personajes se conserva.</p><button className="btn btn-danger" disabled={!available || !!combatError} onClick={() => void changeTurn(true)}>Confirmar cierre</button><button className="btn" disabled={!!pending} onClick={() => setConfirmEnd(false)}>Seguir jugando</button></div>}
           </> : <>

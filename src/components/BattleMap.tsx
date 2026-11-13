@@ -6,6 +6,8 @@ import { playSound } from '../lib/audio';
 import { useEffect, useState, type CSSProperties } from 'react';
 import './BattleMap.css';
 import MonsterPortrait from './MonsterPortrait';
+import CharacterPortrait from './CharacterPortrait';
+import { readAppearance } from '../lib/appearance';
 import {
   supabase,
   type CharacterRow,
@@ -103,6 +105,11 @@ export default function BattleMap({ worldId, characters, schemaOk, mapaInicial }
   const bg = BACKGROUNDS.find((b) => b.value === background) ?? BACKGROUNDS[0];
   const livingCharacters = characters.filter((c) => c.status === 'vivo');
   const selectedToken = tokens.find((t) => t.id === selectedId) ?? null;
+
+  function characterForToken(token: MapToken | null) {
+    if (!token?.id.startsWith('pc-')) return undefined;
+    return characters.find((character) => character.id === token.id.slice(3));
+  }
 
   function tokenAt(x: number, y: number): MapToken | undefined {
     return tokens.find((t) => t.x === x && t.y === y);
@@ -351,7 +358,7 @@ export default function BattleMap({ worldId, characters, schemaOk, mapaInicial }
         <p className="battle-eyebrow">Elige quién entra en la mesa</p>
         {livingCharacters.length === 0 ? <p>No hay personajes vivos todavía.</p> : <div className="battle-character-choices">
           {livingCharacters.map((character) => <button key={character.id} type="button" className="battle-character-choice" onClick={() => addCharacter(character)}>
-            <span className="battle-avatar" aria-hidden="true">{character.name.charAt(0)}</span>
+            <CharacterPortrait species={character.species} profession={character.class_name} appearance={readAppearance(character.notes)} name={character.name} compact decorative className="battle-avatar" />
             <span><strong>{character.name}</strong><small>{character.class_name} · {character.hp}/{character.max_hp} vida</small></span>
             <span className="battle-add-mark" aria-hidden="true">+</span>
           </button>)}
@@ -395,7 +402,12 @@ export default function BattleMap({ worldId, characters, schemaOk, mapaInicial }
                     title={token ? `${token.name} · ${token.hp}/${token.max_hp} vida` : undefined}
                     aria-label={token ? `Casilla ${x + 1}, ${y + 1}: ${token.name}, ${token.hp} de ${token.max_hp} de vida` : `Casilla ${x + 1}, ${y + 1}: vacía`}>
                     {token && <span className={`battle-miniature ${token.id.startsWith('enemy-') ? 'battle-miniature-enemy' : 'battle-miniature-hero'} ${token.hp <= 0 ? 'battle-miniature-down' : ''}`} style={{ '--piece-accent': token.color } as CSSProperties}>
-                      {token.id.startsWith('enemy-') ? <MonsterPortrait name={token.name} className="battle-miniature-portrait" /> : <span className="battle-miniature-initial" aria-hidden="true">{token.name.charAt(0)}</span>}
+                      {token.id.startsWith('enemy-') ? <MonsterPortrait name={token.name} className="battle-miniature-portrait" /> : (() => {
+                        const character = characterForToken(token);
+                        return character
+                          ? <CharacterPortrait species={character.species} profession={character.class_name} appearance={readAppearance(character.notes)} name={character.name} compact decorative className="battle-miniature-portrait" />
+                          : <span className="battle-miniature-initial" aria-hidden="true">{token.name.charAt(0)}</span>;
+                      })()}
                       <span className="battle-miniature-health" aria-hidden="true">{token.hp}</span>
                     </span>}
                     {isMeasurePoint && !token && <span className="battle-measure-pin" aria-hidden="true">{measurePoints.findIndex((point) => point.x === x && point.y === y) + 1}</span>}
@@ -411,7 +423,12 @@ export default function BattleMap({ worldId, characters, schemaOk, mapaInicial }
           {selectedToken ? <>
             <p className="battle-eyebrow">Tu siguiente movimiento</p>
             <div className="selected-token-heading">
-              {selectedToken.id.startsWith('enemy-') ? <MonsterPortrait name={selectedToken.name} /> : <span className="battle-avatar battle-avatar-large" aria-hidden="true">{selectedToken.name.charAt(0)}</span>}
+              {selectedToken.id.startsWith('enemy-') ? <MonsterPortrait name={selectedToken.name} /> : (() => {
+                const character = characterForToken(selectedToken);
+                return character
+                  ? <CharacterPortrait species={character.species} profession={character.class_name} appearance={readAppearance(character.notes)} name={character.name} compact decorative className="battle-avatar battle-avatar-large" />
+                  : <span className="battle-avatar battle-avatar-large" aria-hidden="true">{selectedToken.name.charAt(0)}</span>;
+              })()}
               <div><strong>{selectedToken.name}</strong><small>Casilla {selectedToken.x + 1}, {selectedToken.y + 1}</small></div>
             </div>
             <div className="battle-vitals"><span>Vida</span><b>{selectedToken.hp}<small> / {selectedToken.max_hp}</small></b></div>
