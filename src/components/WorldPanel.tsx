@@ -2,6 +2,7 @@
 // y generadores del mundo vivo (rumores, eventos, consecuencias, PNJ).
 import { useEffect, useState } from 'react';
 import { supabase, type World, type LegacyRow, type JournalRow, type WorldEventRow } from '../lib/supabase';
+import { describeWorldEvent } from '../lib/session';
 import { ADVENTURES_SEED } from '../lib/compendium';
 
 interface WorldPanelProps {
@@ -176,7 +177,7 @@ export default function WorldPanel({ world, schemaOk, playerName }: WorldPanelPr
         {events.map((e) => (
           <div key={e.id} className="event">
             <b>{e.title}</b> <span className="badge">{e.kind}</span>
-            <p>{e.body}</p>
+            <p>{describeWorldEvent(e)}</p>
           </div>
         ))}
       </div>

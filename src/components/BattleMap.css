@@ -1,0 +1,160 @@
+.enchanted-battle { color: #e9ddcf; padding: 0; min-width: 0; }
+.enchanted-battle .battle-heading { display: flex; align-items: end; justify-content: space-between; gap: 20px; margin-bottom: 25px; }
+.enchanted-battle .battle-eyebrow { color: #d1a477; font-size: .62rem; letter-spacing: .17em; text-transform: uppercase; line-height: 1.7; margin-bottom: 7px; }
+.enchanted-battle .battle-heading h2 { font-size: clamp(1.7rem, 3vw, 2.4rem); color: #f0dfc9; }
+.enchanted-battle .battle-piece-count { display: flex; align-items: center; gap: 8px; color: #b9ab9b; font-size: .78rem; padding-bottom: 7px; }
+.enchanted-battle .battle-piece-count svg { color: #bd9466; }
+.enchanted-battle .battle-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin-bottom: 20px; border-block: 1px solid #73573752; padding: 13px 0; }
+.enchanted-battle .battle-setup { position: relative; flex: 0 0 auto; }
+.enchanted-battle .battle-setup summary { cursor: pointer; list-style: none; min-height: 44px; display: flex; align-items: center; gap: 8px; color: #e6c4a0; font-size: .8rem; padding: 9px 10px 9px 0; }
+.enchanted-battle .battle-setup summary::-webkit-details-marker { display: none; }
+.enchanted-battle .battle-setup summary > span { margin-left: 10px; }
+.enchanted-battle .battle-setup-fields { position: absolute; top: calc(100% + 8px); left: 0; z-index: 9; display: grid; grid-template-columns: 1fr 1fr; gap: 13px; width: min(530px, calc(100vw - 40px)); padding: 22px; background: #1d1b19; border: 1px solid #82603d; border-radius: 4px; box-shadow: 0 20px 60px #000b; max-height: 75svh; overflow: auto; }
+.enchanted-battle .battle-setup-fields label { min-width: 0; color: #cdb9a4; font-size: .74rem; }
+.enchanted-battle .battle-setup-fields select, .enchanted-battle .battle-setup-fields input { background: #121315; color: #e4d4c3; border-color: #62513e; font-size: .85rem; margin-bottom: 0; }
+.enchanted-battle .battle-map-picker { grid-column: 1 / -1; }
+.enchanted-battle .battle-setup-fields .battle-clear { align-self: end; margin: 0; }
+.enchanted-battle .battle-primary-tools { display: flex; flex-wrap: wrap; gap: 8px; flex: 1; }
+.enchanted-battle .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border-radius: 3px; font-size: .78rem; border-color: #72563d; background: linear-gradient(#2d2822, #211e1b); color: #e7d0b8; }
+.enchanted-battle .btn svg { flex: 0 0 auto; width: 17px; height: 17px; }
+.enchanted-battle .btn:hover:not(:disabled) { background: #3a2e23; border-color: #b68c5e; }
+.enchanted-battle .btn-primary { background: linear-gradient(#ddbd83, #bc935e); color: #21180f; border-color: #e4c28e; }
+.enchanted-battle .btn-primary:hover:not(:disabled) { background: #e0c18c; }
+.enchanted-battle .battle-save { margin-left: auto; }
+.enchanted-battle .chip-selected { background: #51402a; border-color: #c7a171; color: #ffe1b4; }
+.enchanted-battle .battle-piece-picker { background: #211d18; border: 1px solid #5f4934; padding: 20px; border-radius: 4px; margin: 15px 0; }
+.enchanted-battle .battle-character-choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; margin-top: 13px; }
+.enchanted-battle .battle-character-choice { display: flex; align-items: center; gap: 12px; text-align: left; padding: 12px; border: 1px solid #6d533a; border-radius: 4px; background: #191816; color: #ead8c3; }
+.enchanted-battle .battle-character-choice:hover { border-color: #bc8f60; background: #2d231a; }
+.enchanted-battle .battle-character-choice strong { font-size: .86rem; }
+.enchanted-battle .battle-character-choice small { display: block; color: #bdab97; margin-top: 5px; font-size: .7rem; }
+.enchanted-battle .battle-add-mark { margin-left: auto; color: #d5ae7b; font-size: 1.2rem; }
+.enchanted-battle .battle-avatar { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; flex: 0 0 auto; color: #f3ce95; font: 1.35rem Cinzel, Georgia, serif; background: radial-gradient(circle at 35% 20%, #5e4930, #211c16 75%); border: 1px solid #bd955e; box-shadow: inset 0 0 0 3px #211b16, inset 0 0 0 4px #8b6a43, 0 4px 9px #0006; }
+.enchanted-battle .battle-avatar-large { width: 58px; height: 58px; font-size: 1.7rem; }
+.enchanted-battle .enemy-choice { background: #191715; border-color: #624a34; padding: 10px; }
+.enchanted-battle .enemy-choice .monster-portrait { border-radius: 50%; border: 1px solid #b38a58; width: 50px; height: 50px; }
+.enchanted-battle .enemy-choice strong { font-size: .8rem; }
+.enchanted-battle .battle-notice { display: flex; align-items: center; gap: 10px; padding: 12px 16px; color: #e4c69c; background: #32271c; border: 1px solid #705432; border-radius: 3px; font-size: .84rem; margin: 14px 0; }
+.enchanted-battle .battle-notice svg { flex: 0 0 auto; }
+.enchanted-battle .battle-measure-notice { color: #cce3e9; background: #1c2a30; border-color: #506e77; }
+.enchanted-battle .battle-table-layout { display: grid; grid-template-columns: minmax(0, 1fr) 250px; align-items: start; gap: 24px; }
+.enchanted-battle .battle-board { min-width: 0; }
+.enchanted-battle .battle-board-plaque { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 0 5px 12px; }
+.enchanted-battle .battle-board-plaque > span { font: 1rem/1.4 Cinzel, Georgia, serif; color: #e5c9a4; overflow-wrap: anywhere; }
+.enchanted-battle .battle-board-plaque small { color: #a99580; font-size: .68rem; flex: 0 0 auto; }
+.enchanted-battle .battle-table-frame { position: relative; padding: 20px; border: 1px solid #a47e50; border-radius: 6px; background: repeating-linear-gradient(3deg, #3d2a1929 0 1px, #180f080a 1px 5px), linear-gradient(125deg, #554027, #2b1d13 30%, #38291b 65%, #58432b); box-shadow: 0 20px 55px #0008, inset 0 0 0 4px #17130f, inset 0 0 0 6px #89663f, inset 0 0 0 8px #21180f; }
+.enchanted-battle .battle-table-stud { position: absolute; width: 7px; height: 7px; border-radius: 50%; background: radial-gradient(circle at 35% 25%, #f0d393, #8a673b 55%, #322414); box-shadow: 0 1px 3px #000b; z-index: 2; }
+.enchanted-battle .stud-nw { top: 8px; left: 8px; }
+.enchanted-battle .stud-ne { top: 8px; right: 8px; }
+.enchanted-battle .stud-sw { bottom: 8px; left: 8px; }
+.enchanted-battle .stud-se { bottom: 8px; right: 8px; }
+.enchanted-battle .battle-table-scroll { overflow: auto; max-height: min(840px, 90svh); border: 1px solid #b8945d; scrollbar-color: #9b774c #211910; scrollbar-width: thin; box-shadow: 0 0 0 2px #130e09, 0 0 12px #0008; background: #241b12; }
+.enchanted-battle .battle-grid { display: grid; grid-template-columns: repeat(var(--grid-count), minmax(0, 1fr)); gap: 1px; padding: 2px; width: 100%; min-width: calc(var(--grid-count) * 45px + 3px); background-color: var(--grid-background); background-size: cover; background-position: center; }
+.enchanted-battle .battle-cell { position: relative; display: grid; place-items: center; min-width: 0; min-height: 0; aspect-ratio: 1; padding: 0; border: 1px solid #44351f38; background: color-mix(in srgb, var(--cell-background) 90%, #846633); color: #261c0f; cursor: pointer; border-radius: 0; transition: background .2s, box-shadow .2s; }
+.enchanted-battle .battle-grid-illustrated { background-color: #211b14; }
+.enchanted-battle .battle-grid-illustrated .battle-cell { background: #1511090d; border-color: #eed2a73b; }
+.enchanted-battle .battle-cell:hover { background: #e7c68a40; box-shadow: inset 0 0 0 1px #fff0c488; }
+.enchanted-battle .battle-cell:focus-visible { outline: 3px solid #402a10; outline-offset: -3px; z-index: 3; box-shadow: inset 0 0 0 5px #ffdea2; }
+.enchanted-battle .battle-cell-selected { background: #ffe2a12b; box-shadow: inset 0 0 0 2px #e3ba72; }
+.enchanted-battle .battle-cell-measured { background: #71b4d36b; box-shadow: inset 0 0 0 2px #caeaff; }
+.enchanted-battle .battle-miniature { position: relative; display: grid; place-items: center; width: 77%; aspect-ratio: 1; border-radius: 50%; border: 2px solid #d1b17c; color: #fae0af; background: radial-gradient(ellipse at 35% 15%, color-mix(in srgb, var(--piece-accent) 50%, #b8a386), #24201c 76%); box-shadow: 0 5px 0 #211811, 0 6px 0 #a18255, 0 8px 10px #000a, inset 0 0 0 2px #4a3825; transition: transform .18s, box-shadow .18s; }
+.enchanted-battle .battle-miniature::after { content: ''; position: absolute; inset: -4px; border: 1px solid #4d3824; border-radius: 50%; pointer-events: none; }
+.enchanted-battle .battle-miniature-portrait { width: 100%; height: 100%; border-radius: 50%; position: absolute; inset: 0; border: 1px solid #4b3521; }
+.enchanted-battle .battle-miniature-initial { font: 1.4rem/1 Cinzel, Georgia, serif; color: #ffdeb0; text-shadow: 0 1px 5px #000; padding-bottom: 3px; }
+.enchanted-battle .battle-miniature-health { position: absolute; right: -5px; bottom: -5px; z-index: 2; min-width: 20px; height: 19px; padding: 2px 4px; display: grid; place-items: center; background: linear-gradient(#272119, #11100d); border: 1px solid #b49a6d; border-radius: 10px; color: #fff0cd; font-size: .65rem; line-height: 1; box-shadow: 0 2px 4px #0008; }
+.enchanted-battle .battle-miniature-down { filter: grayscale(1); opacity: .65; }
+.enchanted-battle .battle-cell:hover .battle-miniature { transform: translateY(-3px); }
+.enchanted-battle .battle-cell-selected .battle-miniature { border-color: #fff0b6; box-shadow: 0 5px 0 #3d2912, 0 6px 0 #c29b5a, 0 9px 12px #000b, 0 0 20px #ffdba16b; transform: translateY(-3px); }
+.enchanted-battle .battle-cell-selected .battle-miniature::before { content: ''; position: absolute; inset: -7px; border-radius: 50%; border: 1px solid #ffdf98; animation: miniature-ring 2.8s ease-in-out infinite; }
+.enchanted-battle .battle-measure-pin { display: grid; place-items: center; width: 25px; height: 25px; background: #183b4c; border: 1px solid #cff1ff; color: #eefbff; border-radius: 50%; font: .8rem Cinzel, Georgia, serif; }
+.enchanted-battle .battle-board-caption { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px; padding: 14px 3px; color: #c0aa90; font-size: .7rem; }
+.enchanted-battle .battle-board-caption > span:first-child { display: flex; align-items: center; gap: 7px; }
+.enchanted-battle .battle-board-caption svg { width: 16px; height: 16px; }
+.enchanted-battle .battle-selection { position: sticky; top: 22px; margin-top: 35px; padding: 24px 20px; min-width: 0; border: 1px solid #6a5036; border-radius: 4px; background: radial-gradient(ellipse at 40% 0, #3e2c1b80, transparent 65%), #1b1916; box-shadow: inset 0 0 0 4px #1b1916, inset 0 0 0 5px #79593633; }
+.enchanted-battle .selected-token-heading { gap: 12px; margin: 18px 0 24px; }
+.enchanted-battle .selected-token-heading > div { min-width: 0; }
+.enchanted-battle .selected-token-heading strong { display: block; font: 1rem/1.35 Cinzel, Georgia, serif; color: #efce9d; overflow-wrap: anywhere; }
+.enchanted-battle .selected-token-heading small { display: block; font-size: .66rem; color: #b7a28a; margin-top: 6px; }
+.enchanted-battle .selected-token-heading .monster-portrait { width: 58px; height: 58px; flex: 0 0 auto; border-radius: 50%; border: 2px solid #b18c59; box-shadow: 0 3px 0 #4a3320, 0 5px 12px #0009; }
+.enchanted-battle .battle-vitals { display: flex; align-items: center; justify-content: space-between; color: #bfa68b; font-size: .76rem; }
+.enchanted-battle .battle-vitals b { font-size: 1.2rem; color: #e8d1ac; }
+.enchanted-battle .battle-vitals small { font-size: .77rem; color: #b8a187; }
+.enchanted-battle .battle-hp-meter { height: 5px; margin-top: 9px; background: #483725; border-radius: 5px; overflow: hidden; }
+.enchanted-battle .battle-hp-meter > span { display: block; height: 100%; background: linear-gradient(90deg, #7b8f59, #c7cd91); transition: width .2s; }
+.enchanted-battle .battle-hp-controls { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; margin: 16px 0 12px; }
+.enchanted-battle .battle-hp-controls .btn { padding: 8px 3px; font-size: .8rem; min-width: 0; }
+.enchanted-battle .battle-at-zero { color: #efb59e; font-size: .75rem; margin-top: 10px; }
+.enchanted-battle .battle-selection-hint { color: #b7a38c; font-size: .7rem; line-height: 1.65; }
+.enchanted-battle .battle-move-hint { display: flex; gap: 10px; color: #d5bd9b; font-size: .78rem; line-height: 1.6; padding-top: 22px; margin-top: 20px; border-top: 1px solid #624b32; }
+.enchanted-battle .battle-move-hint svg { flex: 0 0 auto; margin-top: 3px; }
+.enchanted-battle .battle-selection-actions { display: flex; flex-direction: column; gap: 12px; margin-top: 20px; }
+.enchanted-battle .battle-remove { display: flex; justify-content: center; align-items: center; gap: 7px; min-height: 40px; padding: 6px 0; border: 0; background: none; color: #c1a48b; font-size: .7rem; }
+.enchanted-battle .battle-remove svg { width: 15px; height: 15px; }
+.enchanted-battle .battle-remove:hover { color: #efc09b; }
+.enchanted-battle .battle-empty-selection { text-align: center; padding: 10px 0; }
+.enchanted-battle .battle-empty-seal { display: grid; place-items: center; width: 78px; height: 78px; margin: 0 auto 23px; border: 1px solid #947046; border-radius: 50%; color: #d6b17f; background: radial-gradient(#3c2d1c, #1d1914); box-shadow: inset 0 0 0 5px #1c1813, inset 0 0 0 6px #76563488; }
+.enchanted-battle .battle-empty-seal svg { width: 32px; height: 32px; }
+.enchanted-battle .battle-empty-selection h3 { font-size: 1.15rem; color: #e9c99d; margin: 10px 0 13px; }
+.enchanted-battle .battle-empty-selection p:not(.battle-eyebrow) { font-size: .8rem; color: #bca78d; line-height: 1.7; }
+.enchanted-battle .battle-empty-rule { display: block; color: #a78051; margin: 20px 0; }
+.enchanted-battle .battle-empty-selection small { color: #b49c80; font-size: .69rem; }
+@keyframes miniature-ring { 0%, 100% { opacity: .4; transform: scale(.97); } 50% { opacity: .9; transform: scale(1.04); } }
+@media (max-width: 1000px) {
+  .enchanted-battle .battle-table-layout { grid-template-columns: minmax(0, 1fr) 220px; gap: 18px; }
+  .enchanted-battle .battle-primary-tools .btn { padding: 10px; font-size: .73rem; }
+  .enchanted-battle .battle-selection { padding: 22px 16px; }
+}
+@media (max-width: 780px) {
+  .enchanted-battle .battle-table-layout { display: flex; flex-direction: column; gap: 12px; }
+  .enchanted-battle .battle-board { width: 100%; }
+  .enchanted-battle .battle-selection { position: static; width: 100%; margin-top: 0; }
+  .enchanted-battle .battle-empty-selection { padding: 0; }
+  .enchanted-battle .battle-empty-seal { width: 58px; height: 58px; margin-bottom: 14px; }
+  .enchanted-battle .battle-empty-rule { margin: 14px 0; }
+  .enchanted-battle .battle-heading { margin-bottom: 18px; }
+  .enchanted-battle .battle-piece-count { font-size: .67rem; }
+  .enchanted-battle .battle-heading h2 { font-size: 1.7rem; }
+  .enchanted-battle .battle-tools { align-items: stretch; gap: 10px; }
+  .enchanted-battle .battle-primary-tools { width: 100%; flex: 1 0 100%; display: grid; grid-template-columns: 1fr 1fr; }
+  .enchanted-battle .battle-primary-tools .btn { font-size: .7rem; padding: 10px 8px; }
+  .enchanted-battle .battle-save { margin-left: 0; }
+  .enchanted-battle .battle-table-frame { padding: 13px; }
+  .enchanted-battle .battle-table-stud { width: 5px; height: 5px; }
+  .enchanted-battle .stud-nw, .enchanted-battle .stud-ne { top: 6px; }
+  .enchanted-battle .stud-nw, .enchanted-battle .stud-sw { left: 6px; }
+  .enchanted-battle .stud-ne, .enchanted-battle .stud-se { right: 6px; }
+  .enchanted-battle .stud-sw, .enchanted-battle .stud-se { bottom: 6px; }
+  .enchanted-battle .battle-board-plaque > span { font-size: .86rem; }
+  .enchanted-battle .battle-board-plaque small { font-size: .6rem; }
+  .enchanted-battle .battle-setup-fields { grid-template-columns: 1fr; width: min(440px, calc(100vw - 36px)); padding: 18px; }
+  .enchanted-battle .battle-setup-fields .battle-map-picker { grid-column: auto; }
+  .enchanted-battle .battle-setup-fields select, .enchanted-battle .battle-setup-fields input { font-size: 1rem; }
+  .enchanted-battle .battle-character-choices { grid-template-columns: 1fr; }
+  .enchanted-battle .battle-piece-picker { padding: 16px; }
+  .enchanted-battle .battle-notice { padding: 12px; font-size: .77rem; }
+}
+.motion-paused .enchanted-battle *, .motion-paused .enchanted-battle *::before, .motion-paused .enchanted-battle *::after { animation-play-state: paused !important; transition-duration: 0s !important; }
+@media (prefers-reduced-motion: reduce) { .enchanted-battle *, .enchanted-battle *::before, .enchanted-battle *::after { animation: none !important; transition-duration: 0s !important; } }
+/* Combate sobre el tablero */
+.enchanted-battle.combat-board { margin: 6px 0 20px; }
+.enchanted-battle.combat-board .battle-table-frame { padding: 12px; }
+.enchanted-battle.combat-board .battle-table-scroll { max-height: none; }
+.enchanted-battle .battle-grid-illustrated .battle-cell-rear, .enchanted-battle .battle-cell-rear { background: #0c0f14a8; border-color: #9fb4c633; }
+.enchanted-battle .battle-cell-reachable:hover { background: #e7c68a55; box-shadow: inset 0 0 0 2px #ffe2a1; }
+.enchanted-battle .battle-cell-enemy-target { background: #a9473538; box-shadow: inset 0 0 0 2px #ed8566; }
+.enchanted-battle .battle-cell-enemy-target .battle-miniature { border-color: #ffb09a; box-shadow: 0 5px 0 #3d1b16, 0 0 0 3px #f27d5b70, 0 0 20px #e45f3c99; }
+.enchanted-battle .battle-miniature-away { opacity: .5; border-style: dashed; filter: saturate(.4); box-shadow: 0 3px 6px #0008; }
+.enchanted-battle .battle-miniature-turn { border-color: #ffe9a8; box-shadow: 0 5px 0 #3d2912, 0 6px 0 #c29b5a, 0 9px 12px #000b, 0 0 0 3px #ffd98055, 0 0 22px #ffcf70aa; }
+.enchanted-battle .battle-miniature-turn::before { content: ''; position: absolute; inset: -8px; border-radius: 50%; border: 2px solid #ffdf98; animation: miniature-ring 1.8s ease-in-out infinite; pointer-events: none; }
+.enchanted-battle .battle-miniature-striking { animation: miniature-strike .5s ease-out both; z-index: 3; }
+.enchanted-battle .battle-miniature-struck { animation: miniature-struck .7s ease-out both; border-color: #ff8a6b; box-shadow: 0 5px 0 #211811, 0 0 0 3px #ff5a3c88, 0 0 26px #ff4a2acc; z-index: 3; }
+.enchanted-battle .battle-miniature-dodged { animation: miniature-dodge .6s ease-out both; z-index: 3; }
+.enchanted-battle .battle-hit-number { position: absolute; left: 50%; top: -6px; z-index: 5; transform: translate(-50%, -100%); padding: 2px 7px; border-radius: 10px; background: #1a0f0cf0; border: 1px solid #ff9a7a; color: #ffd9c9; font: 600 .82rem/1.2 Cinzel, Georgia, serif; white-space: nowrap; pointer-events: none; animation: hit-number 1.6s ease-out both; }
+.enchanted-battle .battle-miniature-dodged .battle-hit-number { border-color: #a8c3c9; color: #dcebee; background: #10181bf0; }
+@keyframes miniature-strike { 0% { transform: scale(1); } 40% { transform: scale(1.28); } 100% { transform: scale(1); } }
+@keyframes miniature-struck { 0%, 100% { transform: translateX(0); } 15% { transform: translateX(-6px) rotate(-5deg); } 35% { transform: translateX(6px) rotate(5deg); } 55% { transform: translateX(-4px); } 75% { transform: translateX(3px); } }
+@keyframes miniature-dodge { 0%, 100% { transform: translateX(0); } 40% { transform: translateX(9px); } }
+@keyframes hit-number { 0% { opacity: 0; transform: translate(-50%, -60%); } 15% { opacity: 1; transform: translate(-50%, -110%); } 80% { opacity: 1; transform: translate(-50%, -135%); } 100% { opacity: 0; transform: translate(-50%, -150%); } }
+.enchanted-battle .battle-live-combat { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 18px; padding: 12px 16px; margin-bottom: 4px; border: 1px solid #a1533a; border-left: 4px solid #e08a5c; border-radius: 3px; background: #2a1712; color: #f1d5c3; font-size: .86rem; }
+.enchanted-battle .battle-live-combat p { margin: 0; }
+.enchanted-battle .battle-live-combat small { display: block; color: #cbb09d; margin-top: 4px; font-size: .74rem; }

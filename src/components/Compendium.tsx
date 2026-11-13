@@ -1,6 +1,7 @@
 // Compendio buscable para "Journey to Hell": monstruos, hechizos,
 // condiciones y acciones de combate, todo en español.
 import { useMemo, useState } from 'react';
+import MonsterPortrait from './MonsterPortrait';
 import {
   MONSTERS,
   SPELLS,
@@ -11,10 +12,10 @@ import {
 type Tab = 'monstruos' | 'hechizos' | 'condiciones' | 'acciones';
 
 const TABS: { value: Tab; label: string }[] = [
-  { value: 'monstruos', label: '👹 Monstruos' },
-  { value: 'hechizos', label: '✨ Hechizos' },
-  { value: 'condiciones', label: '😵 Condiciones' },
-  { value: 'acciones', label: '⚔️ Acciones de combate' },
+  { value: 'monstruos', label: 'Bestiario' },
+  { value: 'hechizos', label: 'Hechizos' },
+  { value: 'condiciones', label: 'Condiciones' },
+  { value: 'acciones', label: 'Acciones de combate' },
 ];
 
 const SPELL_LEVELS = [0, 1, 2, 3] as const;
@@ -83,17 +84,16 @@ export default function Compendium() {
           : filteredActions.length;
 
   return (
-    <div className="card">
-      <h2>📖 Compendio</h2>
-      <p>Monstruos, hechizos, condiciones y acciones de combate, en español.</p>
+    <div className="card compendium">
+      <h2>Compendio</h2>
+      <p className="hint">Conoce a las criaturas del mundo y prepara tu siguiente movimiento.</p>
 
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }} role="tablist">
+      <div className="chips" role="group" aria-label="Secciones del compendio">
         {TABS.map((t) => (
           <button
             key={t.value}
             type="button"
-            role="tab"
-            aria-selected={tab === t.value}
+            aria-pressed={tab === t.value}
             className={tab === t.value ? 'chip chip-selected' : 'chip'}
             onClick={() => setTab(t.value)}
           >
@@ -115,7 +115,7 @@ export default function Compendium() {
           type="search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="🔍 Buscar por nombre…"
+          placeholder="Buscar por nombre…"
           aria-label="Buscar por nombre"
           style={{ flex: '1 1 12rem', minWidth: '12rem' }}
         />
@@ -162,24 +162,27 @@ export default function Compendium() {
         )}
       </div>
 
-      <p>
+      <p className="hint" role="status">
         {resultCount} resultado{resultCount === 1 ? '' : 's'}
         {query.trim() ? ` para "${query.trim()}"` : ''}
       </p>
 
       {tab === 'monstruos' && (
-        <div style={{ display: 'grid', gap: '0.75rem' }}>
+        <div className="monster-grid">
           {filteredMonsters.length === 0 && <p>No hay monstruos con ese nombre o tipo.</p>}
           {filteredMonsters.map((m) => (
-            <article key={m.name} className="card">
-              <h3>
-                {m.name} <span className="chip">{m.type}</span>
-              </h3>
-              <p>
-                <strong>CD:</strong> {m.cr} · <strong>Vida:</strong> {m.hp} PV ·{' '}
-                <strong>Defensa:</strong> {m.ac}
-              </p>
-              <p>{m.desc}</p>
+            <article key={m.name} className="monster-card">
+              <MonsterPortrait name={m.name} />
+              <div className="monster-card-body">
+                <p className="monster-type">{m.type}</p>
+                <h3>{m.name}</h3>
+                <p className="monster-description">{m.desc}</p>
+                <dl className="monster-stats">
+                  <div><dt>Desafío</dt><dd>{m.cr}</dd></div>
+                  <div><dt>Vida</dt><dd>{m.hp} <small>PV</small></dd></div>
+                  <div><dt>Defensa</dt><dd>{m.ac}</dd></div>
+                </dl>
+              </div>
             </article>
           ))}
         </div>
@@ -204,7 +207,7 @@ export default function Compendium() {
 
       {tab === 'condiciones' && (
         <ul style={{ display: 'grid', gap: '0.75rem', listStyle: 'none', padding: 0 }}>
-          {filteredConditions.length === 0 && <p>No hay condiciones con ese nombre.</p>}
+          {filteredConditions.length === 0 && <li>No hay condiciones con ese nombre.</li>}
           {filteredConditions.map((c) => (
             <li key={c.name} className="card">
               <strong>{c.name}</strong>
@@ -216,7 +219,7 @@ export default function Compendium() {
 
       {tab === 'acciones' && (
         <ul style={{ display: 'grid', gap: '0.75rem', listStyle: 'none', padding: 0 }}>
-          {filteredActions.length === 0 && <p>No hay acciones con ese nombre.</p>}
+          {filteredActions.length === 0 && <li>No hay acciones con ese nombre.</li>}
           {filteredActions.map((a) => (
             <li key={a.name} className="card">
               <strong>{a.name}</strong>
